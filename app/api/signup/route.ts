@@ -121,7 +121,14 @@ export async function POST(req: Request) {
       userId,
       confirmRequired: process.env.SECRELYTE_AUTO_CONFIRM !== '1',
     });
-  } catch {
+  } catch (err) {
+    if (err && typeof err === 'object' && 'issues' in err) {
+      const issues = (err as { issues: { path: unknown[] }[] }).issues;
+      console.error('signup: env', issues.map((i) => i.path.join('.')).join(','));
+    } else {
+      const bits = readErrorBits(err);
+      console.error('signup: unexpected', bits.code, bits.message);
+    }
     return NextResponse.json({ error: 'SIGNUP_FAILED' }, { status: 500 });
   }
 }

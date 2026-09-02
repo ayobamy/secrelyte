@@ -37,8 +37,22 @@ function readClientRaw() {
   };
 }
 
+export const supabaseAdminEnvSchema = z.object({
+  NEXT_PUBLIC_SUPABASE_URL: z.string().url(),
+  SUPABASE_SECRET_KEY: z.string().startsWith('sb_secret_'),
+});
+export type SupabaseAdminEnv = z.infer<typeof supabaseAdminEnvSchema>;
+
 export function getClientEnv(): ClientEnv {
   return clientEnvSchema.parse(readClientRaw());
+}
+
+/** URL + secret key only. Signup must not parse Phase 4 peppers. */
+export function getSupabaseAdminEnv(): SupabaseAdminEnv {
+  return supabaseAdminEnvSchema.parse({
+    NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
+    SUPABASE_SECRET_KEY: process.env.SUPABASE_SECRET_KEY,
+  });
 }
 
 export function getServerEnv(): AppEnv {

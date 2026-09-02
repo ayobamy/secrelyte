@@ -23,6 +23,14 @@ describe('vault invariants eval', () => {
     expect(src).toContain("rpc('store_signup_keys'");
   });
 
+  it('admin client does not parse Phase 4 peppers', () => {
+    const src = readFileSync('lib/supabase/admin.ts', 'utf8');
+    expect(src).toContain('getSupabaseAdminEnv');
+    expect(src).not.toMatch(/getServerEnv/);
+    expect(src).not.toMatch(/SHARE_SESSION_SECRET/);
+    expect(src).not.toMatch(/EMAIL_BLIND_INDEX_PEPPER/);
+  });
+
   it('keystore module does not write localStorage', () => {
     const src = readFileSync('services/vault/src/keystore.ts', 'utf8');
     expect(src).not.toMatch(/localStorage\.setItem/);

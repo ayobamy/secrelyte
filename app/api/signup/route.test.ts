@@ -107,6 +107,7 @@ describe('POST /api/signup', () => {
   });
 
   it('returns JSON 500 when supabase throws a getter-only error', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
     const thrown = {};
     Object.defineProperty(thrown, 'message', { get: () => 'boom', set: undefined });
     createUser.mockRejectedValue(thrown);
