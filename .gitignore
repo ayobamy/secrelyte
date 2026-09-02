@@ -64,3 +64,5 @@ yarn-error.log*
 .pnpm-debug.log*
 
 /graphify-out
+
+.agents/
