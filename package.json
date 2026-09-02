@@ -22,6 +22,7 @@
     "test:e2e": "playwright test",
     "test:contracts": "vitest run contracts",
     "test:rls": "bash scripts/test-rls.sh",
+    "test:vault": "vitest run services/vault contracts/signup.test.ts evals/vault-invariants.eval.ts",
     "db:status": "node scripts/db-status.mjs",
     "db:push": "node scripts/db-push.mjs",
     "audit": "pnpm audit --audit-level=moderate",
@@ -35,11 +36,17 @@
   },
   "dependencies": {
     "@scure/bip39": "2.4.0",
+    "@supabase/ssr": "0.8.0",
+    "@supabase/supabase-js": "2.112.4",
+    "@zxcvbn-ts/core": "3.0.4",
+    "@zxcvbn-ts/language-common": "3.0.4",
     "libsodium-wrappers-sumo": "0.8.4",
     "next": "16.3.4",
+    "pdf-lib": "1.17.1",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "server-only": "^0.0.1",
+    "uqr": "0.1.2",
     "zod": "^3.25.76"
   },
   "devDependencies": {

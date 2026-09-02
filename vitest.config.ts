@@ -7,6 +7,7 @@ export default defineConfig({
     include: [
       'contracts/**/*.test.ts',
       'lib/**/*.test.ts',
+      'app/**/*.test.ts',
       'services/**/test/**/*.test.ts',
       'scripts/**/*.test.ts',
       'evals/**/*.eval.ts',

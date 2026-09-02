@@ -6,7 +6,13 @@ const HSTS = 'max-age=63072000; includeSubDomains; preload';
 const PERMISSIONS = 'camera=(), microphone=(), geolocation=(), payment=()';
 
 export function isStrictPath(pathname: string): boolean {
-  return pathname === '/vault' || pathname.startsWith('/vault/') || pathname.startsWith('/s/');
+  return (
+    pathname === '/vault' ||
+    pathname.startsWith('/vault/') ||
+    pathname.startsWith('/s/') ||
+    pathname === '/login' ||
+    pathname === '/signup'
+  );
 }
 
 export function buildCsp(opts: {

@@ -29,7 +29,14 @@ test('vault route renders without third-party requests', async ({ page }) => {
   });
   await page.goto('/vault');
   await expect(page.getByRole('heading', { name: 'Vault' })).toBeVisible();
-  expect(thirdParty).toEqual([]);
+  await expect(page.getByRole('link', { name: 'Unlock' })).toHaveAttribute('href', '/login');
+  await expect(page.getByRole('link', { name: 'Create a vault' })).toHaveAttribute(
+    'href',
+    '/signup',
+  );
+  await expect(page.getByLabel('Paste a messy block')).toHaveCount(0);
+  const extra = thirdParty.filter((url) => !url.includes('supabase.co'));
+  expect(extra).toEqual([]);
 });
 
 test('share route stays first-party', async ({ page }) => {
@@ -56,8 +63,23 @@ test('home preview reveals one value on click', async ({ page }) => {
   await expect(page.getByText('sk_live_••••k4m2')).toHaveCount(0);
 });
 
-test('vault names the empty prompt and the current page', async ({ page }) => {
+test('locked vault names the current page and stays locked', async ({ page }) => {
   await page.goto('/vault');
-  await expect(page.getByLabel('Paste a messy block')).toBeEnabled();
-  await expect(page.getByRole('link', { name: 'Vault' })).toHaveAttribute('aria-current', 'page');
+  await expect(page.getByRole('heading', { name: 'Vault' })).toBeVisible();
+  await expect(page.getByText('Locked. Keys live in memory on this device only.')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Unlock' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Create a vault' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Vault', exact: true })).toHaveAttribute(
+    'aria-current',
+    'page',
+  );
+});
+
+test('home preview remasks at 30s', async ({ page }) => {
+  await page.clock.install();
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Reveal for 30s' }).click();
+  await expect(page.getByText('sk_live_••••k4m2')).toBeVisible();
+  await page.clock.fastForward(30_000);
+  await expect(page.getByText('sk_live_••••k4m2')).toHaveCount(0);
 });

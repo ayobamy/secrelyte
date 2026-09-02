@@ -27,6 +27,7 @@ export const serverEnvSchema = z.object({
 
 export type ClientEnv = z.infer<typeof clientEnvSchema>;
 export type ServerEnv = z.infer<typeof serverEnvSchema>;
+export type AppEnv = ServerEnv & ClientEnv;
 
 function readClientRaw() {
   return {
@@ -40,7 +41,7 @@ export function getClientEnv(): ClientEnv {
   return clientEnvSchema.parse(readClientRaw());
 }
 
-export function getServerEnv(): ServerEnv {
+export function getServerEnv(): AppEnv {
   const client = getClientEnv();
   const server = serverEnvSchema.parse({
     SUPABASE_SECRET_KEY: process.env.SUPABASE_SECRET_KEY,
@@ -52,7 +53,7 @@ export function getServerEnv(): ServerEnv {
     UPSTASH_REDIS_REST_URL: process.env.UPSTASH_REDIS_REST_URL,
     UPSTASH_REDIS_REST_TOKEN: process.env.UPSTASH_REDIS_REST_TOKEN,
   });
-  return { ...server, ...client } as ServerEnv & ClientEnv;
+  return { ...server, ...client };
 }
 
 export function supabaseOriginFromUrl(url: string): string {

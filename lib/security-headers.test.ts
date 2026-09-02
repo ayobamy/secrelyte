@@ -6,6 +6,8 @@ describe('isStrictPath', () => {
     expect(isStrictPath('/vault')).toBe(true);
     expect(isStrictPath('/vault/p/abc')).toBe(true);
     expect(isStrictPath('/s/token')).toBe(true);
+    expect(isStrictPath('/login')).toBe(true);
+    expect(isStrictPath('/signup')).toBe(true);
     expect(isStrictPath('/')).toBe(false);
   });
 });

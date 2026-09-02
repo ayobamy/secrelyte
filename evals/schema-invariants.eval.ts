@@ -23,6 +23,9 @@ describe('schema invariants eval', () => {
       '0008_consume_share.sql',
       '0009_atomic_password_rotation.sql',
       '0010_cleanup_jobs.sql',
+      '0011_vault_key_rpcs.sql',
+      '0012_service_role_user_keys.sql',
+      '0013_store_signup_keys.sql',
     ]);
   });
 
@@ -48,7 +51,15 @@ describe('schema invariants eval', () => {
       (m) => m[1],
     );
     expect(definers).toEqual(
-      expect.arrayContaining(['consume_share', 'rotate_wrapped_keys', 'audit_immutable']),
+      expect.arrayContaining([
+        'consume_share',
+        'rotate_wrapped_keys',
+        'audit_immutable',
+        'get_own_keys',
+        'ack_recovery_kit',
+        'kdf_params_for_email',
+        'store_signup_keys',
+      ]),
     );
     expect(sql).toContain("SECURITY DEFINER\nSET search_path = ''");
     expect(sql).toContain("LANGUAGE plpgsql SET search_path = '' AS $$");
