@@ -22,6 +22,21 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Install gitleaks
+        env:
+          GITLEAKS_VERSION: "8.24.3"
+          GITLEAKS_TARBALL_SHA256: "9991e0b2903da4c8f6122b5c3186448b927a5da4deef1fe45271c3793f4ee29c"
+        run: |
+          curl -fsSL -o /tmp/gitleaks.tgz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_TARBALL_SHA256}  /tmp/gitleaks.tgz" | sha256sum -c -
+          mkdir -p "${HOME}/.local/bin"
+          tar -xzf /tmp/gitleaks.tgz -C "${HOME}/.local/bin" gitleaks
+          echo "${HOME}/.local/bin" >> "${GITHUB_PATH}"
+
+      - name: Secret scan
+        run: bash scripts/check-gitleaks.sh
+
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with:
           version: 10.24.0
@@ -33,12 +48,6 @@ jobs:
 
       - name: Install (locked, no scripts)
         run: pnpm install --frozen-lockfile --ignore-scripts
-
-      - name: Secret scan
-        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITLEAKS_CONFIG: gitleaks.toml
 
       - name: Next.js floor (CVE-2025-29927)
         run: pnpm check:next

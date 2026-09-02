@@ -14,11 +14,16 @@ paths = [
   '''^\.env\.example$''',
   '''^\.env''',
   '''^\.github/workflows/.*''',
+  '''\.test\.ts$''',
+  '''\.spec\.ts$''',
 ]
 regexes = [
   '''sb_publishable_REPLACE_ME''',
   '''sb_secret_REPLACE_ME''',
   '''sb_publishable_ci_placeholder''',
   '''sb_secret_ci_placeholder''',
+  '''sb_publishable_testkey''',
+  '''sb_secret_testkey''',
   '''sk-ant-REPLACE_ME''',
+  '''eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\.legacy''',
 ]

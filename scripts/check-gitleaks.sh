@@ -9,8 +9,19 @@ if ! command -v gitleaks >/dev/null 2>&1; then
   exit 1
 fi
 
-# Config parses. Do not --no-git the working tree: .env.local lives there.
-gitleaks detect --config "$ROOT/gitleaks.toml" --redact --log-opts="--all" >/dev/null 2>&1 || true
+# Git history only. Untracked .env.local is not in the log.
+set +e
+gitleaks detect --config "$ROOT/gitleaks.toml" --redact --log-opts="--all"
+HISTORY_STATUS=$?
+set -e
+if [ "$HISTORY_STATUS" -eq 1 ]; then
+  echo "FAIL: gitleaks found a leak in git history"
+  exit 1
+fi
+if [ "$HISTORY_STATUS" -ne 0 ]; then
+  echo "FAIL: gitleaks history scan exited $HISTORY_STATUS"
+  exit 1
+fi
 gitleaks version >/dev/null
 
 # Plant a Secrelyte-only marker. Do not put Slack/AWS/GitHub token shapes in git.
