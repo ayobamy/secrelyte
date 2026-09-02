@@ -31,4 +31,10 @@ describe('crypto invariants eval', () => {
     const out = execFileSync('bash', ['scripts/check-crypto-boundary.sh'], { encoding: 'utf8' });
     expect(out).toContain('crypto boundary OK');
   });
+
+  it('allowlists frozen vectors so gitleaks does not treat fixtures as live keys', () => {
+    const toml = readFileSync('gitleaks.toml', 'utf8');
+    expect(toml).toContain(String.raw`^services/crypto/test/vectors\.json$`);
+    expect(toml).toContain(vectors.aead_roundtrip.plaintext);
+  });
 });

@@ -9,13 +9,14 @@ description = "Synthetic plant used by scripts/check-gitleaks.sh. Not a real cre
 regex = '''SECRELYTE_PLANTED=[a-f0-9]{40}'''
 
 [allowlist]
-description = "Placeholders in example env and CI. Never real credentials. Local env is gitignored."
+description = "Placeholders in example env, CI, and frozen crypto fixtures. Never real credentials. Local env is gitignored."
 paths = [
   '''^\.env\.example$''',
   '''^\.env''',
   '''^\.github/workflows/.*''',
   '''\.test\.ts$''',
   '''\.spec\.ts$''',
+  '''^services/crypto/test/vectors\.json$''',
 ]
 regexes = [
   '''sb_publishable_REPLACE_ME''',
@@ -26,4 +27,5 @@ regexes = [
   '''sb_secret_testkey''',
   '''sk-ant-REPLACE_ME''',
   '''eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\.legacy''',
+  '''sk_live_51H8xY2KZvNc''',
 ]
