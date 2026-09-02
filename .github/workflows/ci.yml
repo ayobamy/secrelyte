@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+  NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_placeholder_not_real
+  NEXT_PUBLIC_APP_URL: http://127.0.0.1:3000
+  SUPABASE_SECRET_KEY: sb_secret_ci_placeholder_not_real
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        with:
+          version: 10.24.0
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install (locked, no scripts)
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Secret scan
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: gitleaks.toml
+
+      - name: Next.js floor (CVE-2025-29927)
+        run: pnpm check:next
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Crypto boundary
+        run: pnpm check:crypto
+
+      - name: ESLint libsodium boundary
+        run: pnpm check:eslint-boundary
+
+      - name: Unit tests
+        run: pnpm test:unit
+
+      - name: Dependency audit
+        run: pnpm audit --audit-level=moderate
+
+      - name: Build
+        run: pnpm build
+
+      - name: No secret key in the client bundle
+        run: pnpm check:bundle
+
+      - name: Playwright
+        run: |
+          pnpm exec playwright install --with-deps chromium
+          pnpm test:e2e

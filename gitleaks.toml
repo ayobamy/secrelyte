@@ -1,0 +1,24 @@
+title = "secrelyte"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "secrelyte-gitleaks-plant"
+description = "Synthetic plant used by scripts/check-gitleaks.sh. Not a real credential."
+regex = '''SECRELYTE_PLANTED=[a-f0-9]{40}'''
+
+[allowlist]
+description = "Placeholders in example env and CI. Never real credentials. Local env is gitignored."
+paths = [
+  '''^\.env\.example$''',
+  '''^\.env''',
+  '''^\.github/workflows/.*''',
+]
+regexes = [
+  '''sb_publishable_REPLACE_ME''',
+  '''sb_secret_REPLACE_ME''',
+  '''sb_publishable_ci_placeholder''',
+  '''sb_secret_ci_placeholder''',
+  '''sk-ant-REPLACE_ME''',
+]

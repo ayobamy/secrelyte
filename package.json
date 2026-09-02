@@ -1,0 +1,54 @@
+{
+  "name": "secrelyte",
+  "version": "0.1.0",
+  "private": true,
+  "engines": {
+    "node": ">=20.9.0",
+    "pnpm": ">=10"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint . --max-warnings 0",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "next typegen && tsc --noEmit",
+    "test": "vitest run",
+    "test:unit": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "test:contracts": "vitest run contracts",
+    "audit": "pnpm audit --audit-level=moderate",
+    "check:next": "node scripts/check-next-version.mjs",
+    "check:bundle": "bash scripts/check-bundle-secrets.sh",
+    "check:crypto": "bash scripts/check-crypto-boundary.sh",
+    "check:eslint-boundary": "bash scripts/check-eslint-boundaries.sh",
+    "check:gitleaks": "bash scripts/check-gitleaks.sh",
+    "check:headers": "bash scripts/grade-headers.sh",
+    "verify:phase0": "bash scripts/verify-phase0.sh"
+  },
+  "dependencies": {
+    "next": "16.3.4",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "server-only": "^0.0.1",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.0",
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.3.4",
+    "husky": "^9.1.7",
+    "prettier": "^3.6.2",
+    "tailwindcss": "^4",
+    "typescript": "^5",
+    "vitest": "^3.2.4"
+  },
+  "packageManager": "pnpm@10.24.0"
+}
