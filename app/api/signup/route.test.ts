@@ -53,6 +53,9 @@ describe('POST /api/signup', () => {
     expect(args.p_wrapped_vault_key).toMatch(/^\\x[0-9a-f]+$/);
     expect(args.p_wrapped_vault_key).not.toBeInstanceOf(Uint8Array);
     expect(insert).not.toHaveBeenCalled();
+    const createdArg = createUser.mock.calls[0]?.[0] as { email_confirm?: boolean };
+    expect(createdArg.email_confirm).toBe(true);
+    await expect(res.json()).resolves.toMatchObject({ confirmRequired: false });
   });
 
   it('falls back to table insert when the RPC is missing from the schema cache', async () => {

@@ -1,8 +1,21 @@
+export function signupConfirmsEmail(): boolean {
+  return process.env.SECRELYTE_REQUIRE_EMAIL_CONFIRM !== '1';
+}
+
 export function signupUserMessage(code?: string): string {
   if (code === 'EMAIL_TAKEN') {
     return 'That email already has a vault. Unlock instead.';
   }
   return 'Could not create the account.';
+}
+
+export function unlockUserMessage(err: { code?: string; message?: string }): string {
+  const code = err.code ?? '';
+  const msg = err.message ?? '';
+  if (code === 'email_not_confirmed' || /email not confirmed/i.test(msg)) {
+    return 'Email is not confirmed. In Studio open Authentication, Users, confirm this address, then unlock again.';
+  }
+  return 'Wrong email or password.';
 }
 
 export function isEmailTakenError(err: {

@@ -14,7 +14,7 @@ import {
 } from '@/services/vault';
 import { createBrowserSupabase } from '@/lib/supabase/browser';
 import { PasswordField } from '@/components/password-field';
-import { signupUserMessage } from '@/lib/signup-errors';
+import { signupUserMessage, unlockUserMessage } from '@/lib/signup-errors';
 
 type Kit = SignupMaterial['kit'] & { email: string };
 
@@ -143,7 +143,7 @@ export function LoginForm() {
       const supabase = createBrowserSupabase();
       const signed = await supabase.auth.signInWithPassword({ email, password: authPassword });
       if (signed.error) {
-        setError('Wrong email or password.');
+        setError(unlockUserMessage(signed.error));
         return;
       }
       const keys = await supabase.rpc('get_own_keys');

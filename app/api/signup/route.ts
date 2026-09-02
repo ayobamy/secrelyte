@@ -2,7 +2,12 @@ import { NextResponse } from 'next/server';
 import { SignupRequest } from '@/contracts/vault';
 import { b64urlToBytes } from '@/lib/b64url';
 import { bytesToPgHex } from '@/lib/bytea';
-import { isEmailTakenError, isMissingRpcError, readErrorBits } from '@/lib/signup-errors';
+import {
+  isEmailTakenError,
+  isMissingRpcError,
+  readErrorBits,
+  signupConfirmsEmail,
+} from '@/lib/signup-errors';
 import { createAdminSupabase } from '@/lib/supabase/admin';
 
 export const runtime = 'nodejs';
@@ -90,10 +95,11 @@ export async function POST(req: Request) {
     }
 
     const admin = createAdminSupabase();
+    const confirm = signupConfirmsEmail();
     const created = await admin.auth.admin.createUser({
       email: body.email,
       password: body.authPassword,
-      email_confirm: process.env.SECRELYTE_AUTO_CONFIRM === '1',
+      email_confirm: confirm,
     });
     if (created.error || !created.data.user) {
       const bits = readErrorBits(created.error);
@@ -119,7 +125,7 @@ export async function POST(req: Request) {
     }
     return NextResponse.json({
       userId,
-      confirmRequired: process.env.SECRELYTE_AUTO_CONFIRM !== '1',
+      confirmRequired: !confirm,
     });
   } catch (err) {
     if (err && typeof err === 'object' && 'issues' in err) {

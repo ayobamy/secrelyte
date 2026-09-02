@@ -3,7 +3,9 @@ import {
   isEmailTakenError,
   isMissingRpcError,
   readErrorBits,
+  signupConfirmsEmail,
   signupUserMessage,
+  unlockUserMessage,
 } from './signup-errors';
 
 describe('signup error mapping', () => {
@@ -12,6 +14,25 @@ describe('signup error mapping', () => {
       'That email already has a vault. Unlock instead.',
     );
     expect(signupUserMessage('KEYS_FAILED')).toBe('Could not create the account.');
+  });
+
+  it('maps unconfirmed GoTrue users without calling it a wrong password', () => {
+    expect(
+      unlockUserMessage({ code: 'email_not_confirmed', message: 'Email not confirmed' }),
+    ).toMatch(/not confirmed/);
+    expect(unlockUserMessage({ message: 'Invalid login credentials' })).toBe(
+      'Wrong email or password.',
+    );
+  });
+
+  it('auto-confirms signup until Phase 4 email is required', () => {
+    const prev = process.env.SECRELYTE_REQUIRE_EMAIL_CONFIRM;
+    delete process.env.SECRELYTE_REQUIRE_EMAIL_CONFIRM;
+    expect(signupConfirmsEmail()).toBe(true);
+    process.env.SECRELYTE_REQUIRE_EMAIL_CONFIRM = '1';
+    expect(signupConfirmsEmail()).toBe(false);
+    if (prev === undefined) delete process.env.SECRELYTE_REQUIRE_EMAIL_CONFIRM;
+    else process.env.SECRELYTE_REQUIRE_EMAIL_CONFIRM = prev;
   });
 
   it('detects GoTrue duplicate-email errors without writing .message', () => {

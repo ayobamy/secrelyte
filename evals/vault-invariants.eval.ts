@@ -21,6 +21,8 @@ describe('vault invariants eval', () => {
     expect(src).toContain('authPassword');
     expect(src).toContain('bytesToPgHex');
     expect(src).toContain("rpc('store_signup_keys'");
+    expect(src).toContain('signupConfirmsEmail');
+    expect(src).not.toContain('SECRELYTE_AUTO_CONFIRM');
   });
 
   it('admin client does not parse Phase 4 peppers', () => {
