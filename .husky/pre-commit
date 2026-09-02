@@ -2,3 +2,4 @@
 set -e
 gitleaks protect --staged --redact --config gitleaks.toml
 pnpm lint --max-warnings 0
+pnpm test:crypto

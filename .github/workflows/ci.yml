@@ -67,6 +67,9 @@ jobs:
       - name: Unit tests
         run: pnpm test:unit
 
+      - name: Crypto suite (100% branches)
+        run: pnpm test:crypto
+
       - name: Dependency audit
         run: pnpm audit --audit-level=moderate
 

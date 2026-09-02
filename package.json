@@ -17,6 +17,7 @@
     "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",
     "test:unit": "vitest run",
+    "test:crypto": "vitest run services/crypto --coverage",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:contracts": "vitest run contracts",
@@ -30,6 +31,8 @@
     "verify:phase0": "bash scripts/verify-phase0.sh"
   },
   "dependencies": {
+    "@scure/bip39": "2.4.0",
+    "libsodium-wrappers-sumo": "0.8.4",
     "next": "16.3.4",
     "react": "19.2.8",
     "react-dom": "19.2.8",
@@ -42,6 +45,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@vitest/coverage-v8": "^3.2.7",
     "eslint": "^9",
     "eslint-config-next": "16.3.4",
     "husky": "^9.1.7",

@@ -1,0 +1,36 @@
+{
+  "kdf_salt": {
+    "email": "Ahmed@Example.COM ",
+    "normalized": "ahmed@example.com",
+    "info": "secrelyte:salt:v1",
+    "expected_salt_b64url": "C5dyFuUAY9Xv3jEYIKx4mQ"
+  },
+  "master_key": {
+    "password": "correct horse battery staple",
+    "salt_b64url": "C5dyFuUAY9Xv3jEYIKx4mQ",
+    "params": {
+      "m": 65536,
+      "t": 3,
+      "p": 1
+    },
+    "expected_mk_b64url": "8S-x3OQ6yTLdbWqTk8yUOXYQxfIojQXMuXjMqiR9HO0"
+  },
+  "branch_separation": {
+    "assert": "authKey != MEK",
+    "assert_2": "HKDF(MK,'secrelyte:auth:v1') is stable across runs",
+    "expected_auth_b64url": "qB00aLYCaSZAU7AZroXIt2Hz_KCajvLBm2cpwsJFcuE",
+    "expected_mek_b64url": "U1zkeOvP-ZhaFHNiTZOGkR75owkLM03t4jqat_uQzXg"
+  },
+  "aead_roundtrip": {
+    "key_b64url": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "nonce_b64url": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "plaintext": "sk_live_51H8xY2KZvNc",
+    "aad": "secret:v1|11111111-1111-1111-1111-111111111111|22222222-2222-2222-2222-222222222222|1",
+    "expected_ct_b64url": "C_XJ5YxW6CDs0Lv9zW0tA7Vu710ByCTmfNC2Lywm1VN6bdx8",
+    "expected_n_b64url": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+  },
+  "aad_mismatch_must_fail": {
+    "decrypt_with_aad": "secret:v1|33333333-3333-3333-3333-333333333333|22222222-2222-2222-2222-222222222222|1",
+    "expect": "throws AuthenticationError, returns no plaintext"
+  }
+}

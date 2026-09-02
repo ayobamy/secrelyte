@@ -12,6 +12,16 @@ export default defineConfig({
       'evals/**/*.eval.ts',
     ],
     globals: false,
+    coverage: {
+      provider: 'v8',
+      include: ['services/crypto/src/**/*.ts'],
+      thresholds: {
+        branches: 100,
+        functions: 100,
+        lines: 100,
+        statements: 100,
+      },
+    },
   },
   resolve: {
     alias: {

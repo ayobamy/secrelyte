@@ -1,1 +1,75 @@
-export {};
+export { sodiumReady, getSodium } from './sodium';
+export { AuthenticationError } from './errors';
+export { zeroize, withKey } from './zeroize';
+export { toB64url, fromB64url, toBase32, fromBase32, utf8, utf8String } from './encoding';
+export {
+  AAD,
+  KDF,
+  asAuthKey,
+  asBytes16,
+  asBytes24,
+  asBytes32,
+  asDek,
+  asLk,
+  asMek,
+  asMk,
+  asRk,
+  asSdek,
+  asVk,
+  asX25519PublicKey,
+  asX25519SecretKey,
+  type AuthKey,
+  type Bytes16,
+  type Bytes24,
+  type Bytes32,
+  type DEK,
+  type EnvelopeV1,
+  type LK,
+  type MEK,
+  type MK,
+  type RK,
+  type SDEK,
+  type VK,
+  type X25519PublicKey,
+  type X25519SecretKey,
+} from './types';
+export {
+  ARGON2ID,
+  ARGON2_WORKER_TIMEOUT_MS,
+  OWASP_MIN_MEMORY_KIB,
+  argon2OffMainThreadAvailable,
+  deriveAuthKey,
+  deriveMasterKey,
+  deriveMek,
+  deriveSalt,
+  deriveUnlockMaterial,
+  discardMk,
+  normalizeEmail,
+  type KdfParams,
+} from './kdf';
+export { open, openString, randomNonce, seal, sealString } from './aead';
+export {
+  generateDek,
+  generateKeypair,
+  generateLinkKey,
+  generateSdek,
+  generateVaultKey,
+  unwrapDek,
+  unwrapSecretKey,
+  unwrapVaultKey,
+  wrapDek,
+  wrapSecretKey,
+  wrapVaultKey,
+} from './keys';
+export {
+  generateRecoveryKey,
+  generateRecoveryKit,
+  recoveryKeyFromBase32,
+  recoveryKeyFromWords,
+  recoveryKeyToBase32,
+  recoveryKeyToWords,
+  unwrapSecretKeyFromRecovery,
+  unwrapVaultKeyFromRecovery,
+  wrapSecretKeyForRecovery,
+  wrapVaultKeyForRecovery,
+} from './recovery';
