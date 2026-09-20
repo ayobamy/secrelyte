@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import { signupConfirmsEmail } from './signup-confirm';
 import {
   isEmailTakenError,
   isMissingRpcError,
   readErrorBits,
-  signupConfirmsEmail,
   signupUserMessage,
   unlockUserMessage,
 } from './signup-errors';

@@ -1,7 +1,3 @@
-export function signupConfirmsEmail(): boolean {
-  return process.env.SECRELYTE_REQUIRE_EMAIL_CONFIRM !== '1';
-}
-
 export function signupUserMessage(code?: string): string {
   if (code === 'EMAIL_TAKEN') {
     return 'That email already has a vault. Unlock instead.';

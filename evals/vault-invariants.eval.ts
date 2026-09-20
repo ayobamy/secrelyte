@@ -22,7 +22,16 @@ describe('vault invariants eval', () => {
     expect(src).toContain('bytesToPgHex');
     expect(src).toContain("rpc('store_signup_keys'");
     expect(src).toContain('signupConfirmsEmail');
+    expect(src).toContain('@/lib/signup-confirm');
     expect(src).not.toContain('SECRELYTE_AUTO_CONFIRM');
+  });
+
+  it('keeps signup confirm off the client module', () => {
+    const forms = readFileSync('components/auth-forms.tsx', 'utf8');
+    expect(forms).not.toMatch(/signup-confirm/);
+    expect(forms).not.toMatch(/signupConfirmsEmail/);
+    const confirm = readFileSync('lib/signup-confirm.ts', 'utf8');
+    expect(confirm.startsWith("import 'server-only'")).toBe(true);
   });
 
   it('admin client does not parse Phase 4 peppers', () => {

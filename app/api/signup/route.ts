@@ -2,12 +2,8 @@ import { NextResponse } from 'next/server';
 import { SignupRequest } from '@/contracts/vault';
 import { b64urlToBytes } from '@/lib/b64url';
 import { bytesToPgHex } from '@/lib/bytea';
-import {
-  isEmailTakenError,
-  isMissingRpcError,
-  readErrorBits,
-  signupConfirmsEmail,
-} from '@/lib/signup-errors';
+import { isEmailTakenError, isMissingRpcError, readErrorBits } from '@/lib/signup-errors';
+import { signupConfirmsEmail } from '@/lib/signup-confirm';
 import { createAdminSupabase } from '@/lib/supabase/admin';
 
 export const runtime = 'nodejs';
