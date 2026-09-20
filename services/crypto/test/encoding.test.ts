@@ -38,6 +38,30 @@ describe('encoding', () => {
   it('rejects invalid base32', () => {
     expect(() => fromBase32('!!!')).toThrow(/invalid base32/);
   });
+
+  // 4 bytes is 32 bits, so 2 bits always spill past the last 5-bit group and the tail
+  // branch in toBase32 runs. A length divisible by 5 divides evenly into 5-bit groups and
+  // leaves no tail, which is the other side of that branch.
+  it('round-trips a length that leaves no remainder bits', () => {
+    const bytes = new Uint8Array([0x00, 0xff, 0x11, 0x22, 0x9c]);
+    const encoded = toBase32(bytes);
+    expect(encoded).toHaveLength(8);
+    expect(encoded).not.toMatch(/=/u);
+    expect(fromBase32(encoded)).toEqual(bytes);
+  });
+
+  it('round-trips an empty input', () => {
+    expect(toBase32(new Uint8Array())).toBe('');
+    expect(fromBase32('')).toEqual(new Uint8Array());
+  });
+
+  // The recovery kit's base32 fallback carries a 32-byte recovery key. 256 bits leaves a
+  // 1-bit tail, so this is the production path through toBase32.
+  it('round-trips a 32-byte recovery key', () => {
+    const bytes = Uint8Array.from({ length: 32 }, (_, i) => (i * 7 + 3) & 255);
+    const encoded = toBase32(bytes);
+    expect(fromBase32(encoded)).toEqual(bytes);
+  });
 });
 
 describe('brand constructors', () => {
