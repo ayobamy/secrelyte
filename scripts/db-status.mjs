@@ -43,7 +43,12 @@ export function classifyTablePresence(http, body) {
   if (blob.includes('pgrst205') || blob.includes('could not find the table')) {
     return 'missing';
   }
-  if (http === 401 || http === 403 || blob.includes('42501') || blob.includes('permission denied')) {
+  if (
+    http === 401 ||
+    http === 403 ||
+    blob.includes('42501') ||
+    blob.includes('permission denied')
+  ) {
     return 'present';
   }
   return 'unknown';
@@ -55,9 +60,7 @@ async function main() {
   const secret = env.SUPABASE_SECRET_KEY;
 
   if (!base || !secret) {
-    console.error(
-      'FAIL: need NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SECRET_KEY in .env.local',
-    );
+    console.error('FAIL: need NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SECRET_KEY in .env.local');
     process.exit(1);
   }
 

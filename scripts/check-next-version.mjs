@@ -10,7 +10,10 @@ const nextPkg = require('next/package.json');
 const declared = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).dependencies.next;
 
 function parse(v) {
-  const m = String(v).replace(/^[^\d]*/, '').split('.').map(Number);
+  const m = String(v)
+    .replace(/^[^\d]*/, '')
+    .split('.')
+    .map(Number);
   return { major: m[0] ?? 0, minor: m[1] ?? 0, patch: m[2] ?? 0 };
 }
 

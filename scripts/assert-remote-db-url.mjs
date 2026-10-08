@@ -34,12 +34,9 @@ export function assertRemoteDbUrl(raw) {
 
   const host = (parsed.hostname || '').toLowerCase();
   if (LOCAL_HOSTS.has(host)) {
-    throw new Error(
-      'SUPABASE_DB_URL points at localhost. This script is for the hosted project.',
-    );
+    throw new Error('SUPABASE_DB_URL points at localhost. This script is for the hosted project.');
   }
-  const hosted =
-    host.endsWith('.supabase.co') || host.endsWith('.pooler.supabase.com');
+  const hosted = host.endsWith('.supabase.co') || host.endsWith('.pooler.supabase.com');
   if (!hosted) {
     throw new Error(
       'SUPABASE_DB_URL host is not a supabase.co / pooler.supabase.com database host.',
@@ -48,9 +45,7 @@ export function assertRemoteDbUrl(raw) {
 
   const port = parsed.port ? Number(parsed.port) : 5432;
   if (port === 6543) {
-    throw new Error(
-      'Port 6543 is the transaction pooler. DDL needs the direct URI on port 5432.',
-    );
+    throw new Error('Port 6543 is the transaction pooler. DDL needs the direct URI on port 5432.');
   }
   if (port !== 5432) {
     throw new Error(`Unexpected Postgres port ${port}. Use 5432.`);
@@ -93,9 +88,7 @@ export function toSessionPoolerUrl(raw, region) {
     return { url: trimmed, rewritten: false, host };
   }
   const r = normalizePoolerRegion(region);
-  const user = parsed.username.includes('.')
-    ? parsed.username
-    : `${parsed.username}.${ref}`;
+  const user = parsed.username.includes('.') ? parsed.username : `${parsed.username}.${ref}`;
   const out = new URL(trimmed);
   out.username = user;
   out.hostname = `aws-0-${r}.pooler.supabase.com`;

@@ -26,6 +26,16 @@ describe('buildCsp', () => {
     expect(csp.includes("'unsafe-eval'")).toBe(false);
     expect(csp).toContain('https://abcd.supabase.co');
     expect(csp).toContain("frame-ancestors 'none'");
+    expect(csp).toContain("worker-src 'self'");
+  });
+
+  // Pinned rather than left to the script-src fallback, whose 'strict-dynamic' has no
+  // documented behaviour for workers. See the comment in buildCsp.
+  it('pins worker-src for the argon2 module worker on every tier', () => {
+    for (const tier of ['strict', 'marketing'] as const) {
+      const csp = buildCsp({ nonce: 'abc', isDev: false, supabaseOrigin: null, tier });
+      expect(csp, tier).toContain("worker-src 'self'");
+    }
   });
 
   it('allows unsafe-eval only in development', () => {

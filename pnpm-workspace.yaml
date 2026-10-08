@@ -1,3 +1,22 @@
 ignoredBuiltDependencies:
   - sharp
   - unrs-resolver
+
+# markdownlint-cli2 pins both of these exactly, so a lockfile refresh cannot reach the fix.
+# Remove each once markdownlint-cli2 ships with a fixed version.
+#   smol-toml <=1.8.0: quadratic-time parse() (moderate). Only parses TOML configs; ours is JSONC.
+#   katex <0.18.2: prototype pollution bypasses trust restrictions (low). Reached through
+#   markdownlint's math extension.
+overrides:
+  smol-toml: ^1.9.0
+  katex: ^0.19.0
+
+# Exempts exactly one advisory. Every other advisory, at every level, still fails CI.
+#   GHSA-vfj7-8cjw-p6xm, braces <=3.0.3: stack-exhaustion DoS on deeply nested brace
+#   patterns. No fixed version exists (3.0.3 is the latest). Reached only through dev-time
+#   glob matching in eslint-config-next and markdownlint-cli2, on patterns from our own
+#   config, never attacker input, and the impact is a crash, not a leak.
+#   Remove when braces ships a fix: `pnpm view braces version` above 3.0.3.
+auditConfig:
+  ignoreGhsas:
+    - GHSA-vfj7-8cjw-p6xm

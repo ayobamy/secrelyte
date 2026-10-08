@@ -1,4 +1,4 @@
-.node_modules
+node_modules
 .next
 out
 dist
@@ -7,3 +7,13 @@ playwright-report
 test-results
 pnpm-lock.yaml
 docs
+
+# Vendored from supabase/agent-skills and pinned by computedHash in skills-lock.json.
+# Reformatting changes the content and fights the next skill sync.
+.claude/skills/
+.agents/
+
+# Prose, not code. Prettier's only change here is collapsing deliberate blank lines
+# between sections.
+CLAUDE.md
+AGENTS.md

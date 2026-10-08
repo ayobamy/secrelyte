@@ -42,6 +42,33 @@ describe('vault invariants eval', () => {
     expect(src).not.toMatch(/EMAIL_BLIND_INDEX_PEPPER/);
   });
 
+  // Every product DEK the vault UI opens or creates is zeroed in a finally, so a throw from
+  // sealing, opening, or the insert cannot leave key material in memory.
+  it('zeroes every product DEK the vault UI acquires, on every path', () => {
+    const src = readFileSync('components/vault-app.tsx', 'utf8');
+    const acquired = src.match(/await (openProductDek|wrapNewProductDek)\(/g) ?? [];
+    const zeroed = src.match(/finally \{\s*(?:\/\/[^\n]*\n\s*)*await discardDek\(dek\)/g) ?? [];
+    expect(acquired.length).toBeGreaterThan(0);
+    expect(zeroed.length).toBe(acquired.length);
+  });
+
+  // Raw Uint8Arrays reaching a bytea column over PostgREST are stored as the JSON text of an
+  // index-keyed object. The row builders hex-encode; nothing else may feed these inserts.
+  it('writes bytea columns only through the row builders', () => {
+    const src = readFileSync('components/vault-app.tsx', 'utf8');
+    const builders: Record<string, string> = {
+      products: 'productInsertRow',
+      secrets: 'secretInsertRow',
+    };
+    for (const [table, builder] of Object.entries(builders)) {
+      const args = [
+        ...src.matchAll(new RegExp(`from\\('${table}'\\)\\.insert\\(\\s*(\\w+)`, 'g')),
+      ].map((m) => m[1]);
+      expect(args.length, table).toBeGreaterThan(0);
+      expect(new Set(args), table).toEqual(new Set([builder]));
+    }
+  });
+
   it('keystore module does not write localStorage', () => {
     const src = readFileSync('services/vault/src/keystore.ts', 'utf8');
     expect(src).not.toMatch(/localStorage\.setItem/);

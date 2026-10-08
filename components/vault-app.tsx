@@ -15,6 +15,8 @@ import {
   isUnlocked,
   lockKeys,
   openProductDek,
+  productInsertRow,
+  secretInsertRow,
   openSecretValue,
   phraseMatchesCurrentVault,
   pickChallengeIndices,
@@ -301,65 +303,115 @@ function UnlockedVault() {
 
   async function addProduct(e: React.FormEvent) {
     e.preventDefault();
+    setError(null);
     const supabase = createBrowserSupabase();
     const session = await supabase.auth.getUser();
     const userId = session.data.user?.id;
-    if (!userId) return;
+    if (!userId) {
+      setError('Your session ended. Unlock again to add a product.');
+      return;
+    }
     const id = crypto.randomUUID();
-    const { dek, wrapped } = await wrapNewProductDek(id);
-    await supabase.from('products').insert({
-      id,
-      user_id: userId,
-      name: productName,
-      wrapped_dek: wrapped,
-      environment: 'production',
-    });
-    await discardDek(dek);
-    await refresh();
+    try {
+      const { dek, wrapped } = await wrapNewProductDek(id);
+      let insertError: unknown;
+      try {
+        ({ error: insertError } = await supabase.from('products').insert(
+          productInsertRow({
+            id,
+            userId,
+            name: productName,
+            environment: 'production',
+            wrappedDek: wrapped,
+          }),
+        ));
+      } finally {
+        await discardDek(dek);
+      }
+      if (insertError) {
+        setError('Could not save the product. Nothing was stored.');
+        return;
+      }
+      await refresh();
+    } catch {
+      setError('Could not save the product. Nothing was stored.');
+    }
   }
 
   async function addSecret(e: React.FormEvent) {
     e.preventDefault();
-    if (!selected) return;
+    setError(null);
     const product = products.find((p) => p.id === selected);
-    if (!product) return;
+    if (!product) {
+      setError('Add or pick a product first.');
+      return;
+    }
     const id = crypto.randomUUID();
-    const dek = await openProductDek(product.id, product.wrapped_dek);
-    const sealed = await sealSecretValue({
-      dek,
-      productId: product.id,
-      secretId: id,
-      version: 1,
-      value: secretValue,
-    });
-    const supabase = createBrowserSupabase();
-    await supabase.from('secrets').insert({
-      id,
-      product_id: product.id,
-      key_name: secretName,
-      ciphertext: sealed.ciphertext,
-      nonce: sealed.nonce,
-      version: 1,
-    });
-    await discardDek(dek);
-    setSecretValue('');
-    await refresh();
+    try {
+      const dek = await openProductDek(product.id, product.wrapped_dek);
+      let insertError: unknown;
+      try {
+        const sealed = await sealSecretValue({
+          dek,
+          productId: product.id,
+          secretId: id,
+          version: 1,
+          value: secretValue,
+        });
+        const supabase = createBrowserSupabase();
+        ({ error: insertError } = await supabase.from('secrets').insert(
+          secretInsertRow({
+            id,
+            productId: product.id,
+            keyName: secretName,
+            version: 1,
+            ciphertext: sealed.ciphertext,
+            nonce: sealed.nonce,
+          }),
+        ));
+      } finally {
+        // Zeroed on every path, including a throw from seal or the insert.
+        await discardDek(dek);
+      }
+      if (insertError) {
+        // The value stays in the box so the paste is not lost.
+        setError('Could not store the secret. Nothing was saved.');
+        return;
+      }
+      setSecretValue('');
+      await refresh();
+    } catch (err) {
+      setError(
+        err instanceof AuthenticationError
+          ? 'Tamper warning. This product key did not authenticate.'
+          : 'Could not store the secret. Nothing was saved.',
+      );
+    }
   }
 
   async function reveal(secret: SecretRow) {
+    setError(null);
+    const product = products.find((p) => p.id === secret.product_id);
+    if (!product) {
+      setError('Reveal failed.');
+      return;
+    }
     try {
-      const product = products.find((p) => p.id === secret.product_id);
-      if (!product) return;
       const dek = await openProductDek(product.id, product.wrapped_dek);
-      const value = await openSecretValue({
-        dek,
-        productId: product.id,
-        secretId: secret.id,
-        version: secret.version,
-        ciphertext: bytesFromWire(secret.ciphertext),
-        nonce: bytesFromWire(secret.nonce),
-      });
-      await discardDek(dek);
+      let value: string;
+      try {
+        value = await openSecretValue({
+          dek,
+          productId: product.id,
+          secretId: secret.id,
+          version: secret.version,
+          ciphertext: bytesFromWire(secret.ciphertext),
+          nonce: bytesFromWire(secret.nonce),
+        });
+      } finally {
+        // A tampered ciphertext throws here; the DEK is zeroed regardless.
+        await discardDek(dek);
+      }
       startReveal(value);
     } catch (err) {
       setError(

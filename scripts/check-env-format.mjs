@@ -44,7 +44,10 @@ if (kind(env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY) !== 'sb_publishable') {
 if (env.SUPABASE_SECRET_KEY && kind(env.SUPABASE_SECRET_KEY) !== 'sb_secret') {
   failures.push('SUPABASE_SECRET_KEY is present but not sb_secret_');
 }
-if (env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY && env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY.startsWith('sb_secret_')) {
+if (
+  env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY &&
+  env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY.startsWith('sb_secret_')
+) {
   failures.push('secret key placed in a NEXT_PUBLIC_ var');
 }
 

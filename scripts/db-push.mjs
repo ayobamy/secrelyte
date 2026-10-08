@@ -46,16 +46,11 @@ let dbUrl;
 let target;
 try {
   assertRemoteDbUrl(env.SUPABASE_DB_URL);
-  const pooler = toSessionPoolerUrl(
-    env.SUPABASE_DB_URL,
-    env.SUPABASE_POOLER_REGION,
-  );
+  const pooler = toSessionPoolerUrl(env.SUPABASE_DB_URL, env.SUPABASE_POOLER_REGION);
   dbUrl = pooler.url;
   target = assertRemoteDbUrl(dbUrl);
   if (pooler.rewritten) {
-    console.log(
-      `Direct db.*.supabase.co is IPv6-only. Using session pooler ${pooler.host}:5432`,
-    );
+    console.log(`Direct db.*.supabase.co is IPv6-only. Using session pooler ${pooler.host}:5432`);
   }
 } catch (err) {
   console.error(`FAIL: ${err instanceof Error ? err.message : err}`);
@@ -78,16 +73,7 @@ console.log(
   'Enable pg_cron on the project (Dashboard > Database > Extensions) before 0001 if it is not already on.',
 );
 
-const args = [
-  'exec',
-  'supabase',
-  'db',
-  'push',
-  '--db-url',
-  dbUrl,
-  '--yes',
-  '--skip-vault',
-];
+const args = ['exec', 'supabase', 'db', 'push', '--db-url', dbUrl, '--yes', '--skip-vault'];
 if (dryRun) args.push('--dry-run');
 
 const result = spawnSync('pnpm', args, {

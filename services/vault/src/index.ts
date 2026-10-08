@@ -25,6 +25,13 @@ export {
 export { startIdleLock } from './idle';
 export { wrapNewProductDek, openProductDek, discardDek } from './products';
 export { sealSecretValue, openSecretValue } from './secrets';
+export {
+  productInsertRow,
+  secretInsertRow,
+  type PgHex,
+  type ProductInsertRow,
+  type SecretInsertRow,
+} from './rows';
 export { envelopeToBytes, bytesToEnvelope, bytesFromWire, bytesToPgHex } from './envelope';
 export { buildRecoveryKitPdf, downloadBytes } from './recovery-pdf';
 export { phraseMatchesCurrentVault } from './recovery-gate';

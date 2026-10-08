@@ -24,8 +24,8 @@ jobs:
 
       - name: Install gitleaks
         env:
-          GITLEAKS_VERSION: "8.24.3"
-          GITLEAKS_TARBALL_SHA256: "9991e0b2903da4c8f6122b5c3186448b927a5da4deef1fe45271c3793f4ee29c"
+          GITLEAKS_VERSION: '8.24.3'
+          GITLEAKS_TARBALL_SHA256: '9991e0b2903da4c8f6122b5c3186448b927a5da4deef1fe45271c3793f4ee29c'
         run: |
           curl -fsSL -o /tmp/gitleaks.tgz \
             "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
@@ -57,6 +57,10 @@ jobs:
 
       - name: Lint
         run: pnpm lint
+
+      # Unenforced before 2026-09-21, by which point 14 files had drifted.
+      - name: Format
+        run: pnpm format:check
 
       - name: Crypto boundary
         run: pnpm check:crypto
@@ -126,3 +130,36 @@ jobs:
         env:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
         run: bash scripts/test-consume-share-parallel.sh
+
+  # Drives a real signup, recovery kit, store and reveal against local Supabase. The gate job's
+  # Playwright run uses placeholder keys, so the specs that need a backend skip there; this is
+  # where they run, including the no-plaintext-egress test the product's claim rests on.
+  vault-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        with:
+          version: 10.24.0
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install (locked, no scripts)
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - uses: supabase/setup-cli@ab058987d8d6c725971f6cf9d0b5c98467e30bd1 # v1
+        with:
+          version: 2.116.0
+
+      - name: Start local Supabase
+        run: supabase start
+
+      - name: Playwright browser
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Vault E2E (no plaintext egress, reveal and clipboard timing)
+        run: pnpm test:e2e:vault
