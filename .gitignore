@@ -16,6 +16,7 @@
 .claude/audits/
 .claude/sessions/
 .claude/.local/
+.claude/worktrees/
 
 # Dependencies
 node_modules/

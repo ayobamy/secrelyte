@@ -3,21 +3,28 @@ import { HERO_BODY, HERO_EYEBROW, HERO_HEADLINE } from './hero-copy';
 import { bannedVoiceHits } from './voice';
 
 describe('hero copy', () => {
-  it('leads with the verb loop, not a category definition', () => {
-    expect(HERO_HEADLINE.join(' ')).toBe('Ask for it. Send it. Watch it expire.');
+  it('leads with the guarantee as the headline', () => {
+    expect(HERO_HEADLINE).toBe('The secrets manager that can’t read your secrets.');
   });
 
-  it('keeps the architecture claim in the body, above the fold', () => {
-    expect(HERO_BODY).toMatch(/We cannot read your secrets/);
-    expect(HERO_BODY).not.toMatch(/AI-powered/i);
+  it('backs the guarantee with the mechanism in the body, above the fold', () => {
+    expect(HERO_BODY).toMatch(/password never leaves your browser/);
+    expect(HERO_BODY).toMatch(/Argon2id/);
+    expect(HERO_BODY).toMatch(/ciphertext it cannot open/);
   });
 
   it('keeps the name line as the eyebrow', () => {
     expect(HERO_EYEBROW).toBe('Your secrets, in the light.');
   });
 
-  it('passes the banned-voice gate', () => {
-    const blob = `${HERO_EYEBROW} ${HERO_HEADLINE.join(' ')} ${HERO_BODY}`;
+  it('never leads with AI', () => {
+    const blob = `${HERO_EYEBROW} ${HERO_HEADLINE} ${HERO_BODY}`;
+    expect(blob).not.toMatch(/\bAI\b|Claude|model|LLM/i);
+  });
+
+  it('passes the banned-voice gate and uses no em dashes', () => {
+    const blob = `${HERO_EYEBROW} ${HERO_HEADLINE} ${HERO_BODY}`;
     expect(bannedVoiceHits(blob)).toEqual([]);
+    expect(blob).not.toContain('—');
   });
 });

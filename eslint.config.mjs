@@ -58,6 +58,9 @@ const eslintConfig = defineConfig([
     'test-results/**',
     'next-env.d.ts',
     'docs/**',
+    // Claude Code agent worktrees: full copies of the repo, each with its own build output.
+    // ESLint does not read .gitignore, so without this `eslint .` lints them too.
+    '.claude/worktrees/**',
   ]),
 ]);
 

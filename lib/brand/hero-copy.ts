@@ -1,5 +1,9 @@
-/** Frozen brand lines, ordered as the hero actually uses them. */
+/**
+ * Frozen hero lines, ordered as the hero uses them. The headline is the guarantee itself
+ * (brand direction section 2, line 3) so the first viewport says what the product is and why
+ * it is different. The interface, Claude included, is the later surprise, never the lead.
+ */
 export const HERO_EYEBROW = 'Your secrets, in the light.';
-export const HERO_HEADLINE = ['Ask for it.', 'Send it.', 'Watch it expire.'] as const;
+export const HERO_HEADLINE = 'The secrets manager that can’t read your secrets.';
 export const HERO_BODY =
-  'We cannot read your secrets. The database holds blobs. The model never sees a value.';
+  'Your password never leaves your browser. Argon2id derives the keys on your device, and our server stores ciphertext it cannot open.';

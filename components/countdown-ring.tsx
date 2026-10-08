@@ -32,6 +32,7 @@ export function CountdownRing({ ratio, label, size = 24 }: CountdownRingProps) {
         strokeDasharray={circumference}
         strokeDashoffset={offset}
         transform={`rotate(-90 ${center} ${center})`}
+        className="ring-track"
       />
     </svg>
   );

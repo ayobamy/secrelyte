@@ -1,19 +1,5 @@
 @import 'tailwindcss';
-
-:root {
-  --base: #fcfcfd;
-  --ink: #0e1116;
-  --muted: #6b7280;
-  --line: #e5e7eb;
-  --signal: #f5b32e;
-  --signal-ink: #8a5a00;
-  --sealed: #1f9d6b;
-  --sealed-ink: #0f6b48;
-  --exposed: #e5484d;
-  --exposed-ink: #b42318;
-  --paper: #ffffff;
-  --ease: cubic-bezier(0.32, 0.72, 0, 1);
-}
+@import './tokens.css';
 
 @theme inline {
   --color-base: var(--base);
@@ -29,6 +15,11 @@
   --color-paper: var(--paper);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --shadow-pill: var(--elev-pill);
+  --shadow-float: var(--elev-float);
+  --shadow-card: var(--elev-card);
+  --shadow-lift: var(--elev-lift);
+  --inset-shadow-top: var(--elev-inset-top);
 }
 
 html {
@@ -40,15 +31,6 @@ body {
   background: var(--base);
   color: var(--ink);
   font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
-}
-
-.light-wash {
-  animation: wash-breathe 14s var(--ease) infinite;
-  background: radial-gradient(
-    ellipse 80% 55% at 50% -12%,
-    color-mix(in srgb, var(--signal) 11%, transparent),
-    transparent 70%
-  );
 }
 
 .grain {
@@ -66,45 +48,29 @@ body {
   outline-offset: 3px;
 }
 
+/*
+ * Motion is opt-in. Every keyframe animation below lives inside a no-preference block, and
+ * each class's resting style is its finished state, so reduced motion shows the end frame
+ * instead of a half-played one. This rule then quiets the Tailwind transition utilities.
+ * It is unlayered, and unlayered CSS beats @layer utilities, so no priority override is needed.
+ */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms;
+    animation-iteration-count: 1;
+    transition-duration: 0.01ms;
+    scroll-behavior: auto;
   }
 }
 
-@keyframes wash-breathe {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.72;
-  }
-}
-
-@keyframes settle {
-  from {
-    transform: translateY(12px);
-  }
-  to {
-    transform: translateY(0);
-  }
-}
-
-.settle {
-  animation: settle 700ms var(--ease) both;
-}
-
-.settle-delay-1 {
-  animation-delay: 90ms;
-}
-
-.settle-delay-2 {
-  animation-delay: 160ms;
+.light-wash {
+  background: radial-gradient(
+    ellipse 80% 55% at 50% -12%,
+    color-mix(in srgb, var(--signal) 11%, transparent),
+    transparent 70%
+  );
 }
 
 .hero-stage {
@@ -142,104 +108,40 @@ body {
     color-mix(in srgb, var(--signal) 28%, transparent),
     transparent
   );
-  animation: ray-fall 5.5s var(--ease) infinite;
 }
 
-@keyframes ray-fall {
-  0%,
-  100% {
-    transform: rotate(18deg) scaleY(0.85);
-    opacity: 0.45;
-  }
-  50% {
-    transform: rotate(22deg) scaleY(1.05);
-    opacity: 1;
-  }
+/*
+ * Two messages in one cell. The box always holds the taller one, and the inactive message is
+ * visibility:hidden (also hidden from assistive tech), so swapping state never shifts layout.
+ */
+.stack-swap {
+  display: grid;
 }
 
-.hero-rule {
-  display: block;
-  width: 82%;
-  max-width: 22rem;
-  height: 2px;
-  margin-top: 1.5rem;
-  border-radius: 99px;
-  background: color-mix(in srgb, var(--signal) 70%, white);
-  transform: scaleX(0);
-  transform-origin: left center;
-  animation:
-    rule-draw 900ms var(--ease) 320ms forwards,
-    rule-glow 2.8s var(--ease) 1.2s infinite;
+.stack-swap > * {
+  grid-area: 1 / 1;
 }
 
-@keyframes rule-draw {
-  to {
-    transform: scaleX(1);
-  }
+/* Countdown ring: the 100ms tick reads as a continuous sweep. */
+.ring-track {
+  transition: stroke-dashoffset 100ms linear;
 }
 
-@keyframes rule-glow {
-  0%,
-  100% {
-    filter: brightness(1);
-  }
-  50% {
-    filter: brightness(1.25);
-  }
-}
-
-@keyframes float {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-10px);
-  }
-}
-
-@keyframes nudge {
-  0%,
-  70%,
-  100% {
-    transform: translateX(0);
-  }
-  80% {
-    transform: translateX(4px);
-  }
-}
-
-@keyframes mask-wave {
-  0%,
-  100% {
-    opacity: 1;
-    transform: translateY(0);
-  }
-  45% {
-    opacity: 0.28;
-    transform: translateY(-3px);
-  }
-}
-
-.mask-dot {
+/* Masked values: sealed-green dots with a slow light pass, one rule instead of per-dot delays. */
+.sealed-dots {
   display: inline-block;
-  animation: mask-wave 2.6s var(--ease) infinite;
-}
-
-.nudge {
-  animation: nudge 2.4s var(--ease) infinite;
-}
-
-.group:hover .nudge {
-  animation-play-state: paused;
-}
-
-.settle-delay-3 {
-  animation-delay: 240ms;
-}
-
-.settle-delay-4 {
-  animation-delay: 320ms;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  color: var(--sealed-ink);
+  mask-image: linear-gradient(
+    90deg,
+    black 0 40%,
+    color-mix(in srgb, black 30%, transparent) 50%,
+    black 60% 100%
+  );
+  mask-size: 300% 100%;
+  mask-position: 0% 0;
 }
 
 .preview-stage {
@@ -259,7 +161,6 @@ body {
     transparent 72%
   );
   filter: blur(28px);
-  animation: float 6.5s var(--ease) infinite;
 }
 
 .preview-ring {
@@ -275,14 +176,7 @@ body {
     color-mix(in srgb, var(--signal) 65%, white) 68%,
     transparent 80%
   );
-  mask: radial-gradient(farthest-side, transparent calc(100% - 1.5px), #000 calc(100% - 1.5px));
-  animation: spin-slow 12s linear infinite;
-}
-
-@keyframes spin-slow {
-  to {
-    transform: rotate(1turn);
-  }
+  mask: radial-gradient(farthest-side, transparent calc(100% - 1.5px), black calc(100% - 1.5px));
 }
 
 .preview-card {
@@ -307,31 +201,6 @@ body {
   position: absolute;
   inset: -1px;
   border-radius: inherit;
-  animation: sealed-wait 3.4s var(--ease) infinite;
-}
-
-@keyframes sealed-wait {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--sealed) 0%, transparent);
-  }
-  50% {
-    box-shadow: 0 0 0 8px color-mix(in srgb, var(--sealed) 10%, transparent);
-  }
-}
-
-.encrypted-pulse {
-  animation: encrypted-pulse 2.8s var(--ease) infinite;
-}
-
-@keyframes encrypted-pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.4;
-  }
 }
 
 .light-sweep {
@@ -359,20 +228,6 @@ body {
   );
 }
 
-.preview-card .light-sweep::after {
-  animation: sweep 1.35s var(--ease) 480ms both;
-}
-
-.preview-stage:hover .light-sweep::after {
-  animation: sweep 1.15s var(--ease) both;
-}
-
-@keyframes sweep {
-  to {
-    transform: translateX(280%) skewX(-20deg);
-  }
-}
-
 .ink-shine {
   position: relative;
   overflow: hidden;
@@ -384,15 +239,187 @@ body {
   position: absolute;
   inset: 0;
   transform: translateX(-120%) skewX(-16deg);
-  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.18), transparent);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, white 18%, transparent),
+    transparent
+  );
 }
 
-.cta-shine::after {
-  animation: shine-pass 4.4s var(--ease) infinite;
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  .light-wash {
+    animation: wash-breathe 14s var(--ease) infinite;
+  }
+
+  .light-ray {
+    animation: ray-fall 5.5s var(--ease) infinite;
+  }
+
+  .settle {
+    animation: settle 700ms var(--ease) both;
+  }
+
+  .settle-delay-1 {
+    animation-delay: 90ms;
+  }
+
+  .settle-delay-2 {
+    animation-delay: 160ms;
+  }
+
+  .settle-delay-3 {
+    animation-delay: 240ms;
+  }
+
+  .settle-delay-4 {
+    animation-delay: 320ms;
+  }
+
+  .sealed-dots {
+    animation: dots-pass 3.2s var(--ease) infinite;
+  }
+
+  .nudge {
+    animation: nudge 2.4s var(--ease) infinite;
+  }
+
+  .group:hover .nudge {
+    animation-play-state: paused;
+  }
+
+  .preview-halo {
+    animation: float 6.5s var(--ease) infinite;
+  }
+
+  .preview-ring {
+    animation: spin-slow 12s linear infinite;
+  }
+
+  .sealed-wait::before {
+    animation: sealed-wait 3.4s var(--ease) infinite;
+  }
+
+  .encrypted-pulse {
+    animation: encrypted-pulse 2.8s var(--ease) infinite;
+  }
+
+  .preview-card .light-sweep::after {
+    animation: sweep 1.35s var(--ease) 480ms both;
+  }
+
+  .preview-stage:hover .light-sweep::after {
+    animation: sweep 1.15s var(--ease) both;
+  }
+
+  .cta-shine::after {
+    animation: shine-pass 4.4s var(--ease) infinite;
+  }
+
+  .ink-shine:hover::after {
+    animation: sweep 700ms var(--ease) both;
+  }
+
+  .unmask {
+    animation: unmask 120ms var(--ease) both;
+  }
 }
 
-.ink-shine:hover::after {
-  animation: sweep 700ms var(--ease) both;
+@keyframes wash-breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.72;
+  }
+}
+
+@keyframes settle {
+  from {
+    transform: translateY(12px);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes ray-fall {
+  0%,
+  100% {
+    transform: rotate(18deg) scaleY(0.85);
+    opacity: 0.45;
+  }
+  50% {
+    transform: rotate(22deg) scaleY(1.05);
+    opacity: 1;
+  }
+}
+
+@keyframes dots-pass {
+  from {
+    mask-position: 100% 0;
+  }
+  to {
+    mask-position: 0% 0;
+  }
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes nudge {
+  0%,
+  70%,
+  100% {
+    transform: translateX(0);
+  }
+  80% {
+    transform: translateX(4px);
+  }
+}
+
+@keyframes spin-slow {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+@keyframes sealed-wait {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--sealed) 0%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 8px color-mix(in srgb, var(--sealed) 10%, transparent);
+  }
+}
+
+@keyframes encrypted-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+@keyframes sweep {
+  to {
+    transform: translateX(280%) skewX(-20deg);
+  }
 }
 
 @keyframes shine-pass {
@@ -413,8 +440,4 @@ body {
   to {
     clip-path: inset(0 0 0 0);
   }
-}
-
-.unmask {
-  animation: unmask 120ms var(--ease) both;
 }

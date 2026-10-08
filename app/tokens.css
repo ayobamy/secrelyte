@@ -1,0 +1,26 @@
+/*
+ * Brand tokens. The only file in app/ that holds literal colour values; everything else reads
+ * these through var() or the Tailwind theme in globals.css. Palette per the brand direction:
+ * near-white base, amber as the single accent, sealed green and exposed red for state only.
+ */
+:root {
+  --base: #fcfcfd;
+  --ink: #0e1116;
+  --muted: #6b7280;
+  --line: #e5e7eb;
+  --signal: #f5b32e;
+  --signal-ink: #8a5a00;
+  --sealed: #1f9d6b;
+  --sealed-ink: #0f6b48;
+  --exposed: #e5484d;
+  --exposed-ink: #b42318;
+  --paper: #ffffff;
+  --ease: cubic-bezier(0.32, 0.72, 0, 1);
+
+  /* Elevation. Ink at low alpha, never pure black, so shadows stay warm on the light base. */
+  --elev-pill: 0 8px 30px rgb(14 17 22 / 0.04);
+  --elev-float: 0 18px 50px rgb(14 17 22 / 0.05);
+  --elev-card: 0 1px 2px rgb(14 17 22 / 0.04), 0 16px 40px -18px rgb(14 17 22 / 0.14);
+  --elev-lift: 0 1px 2px rgb(14 17 22 / 0.05), 0 28px 70px -28px rgb(14 17 22 / 0.24);
+  --elev-inset-top: inset 0 1px 0 rgb(255 255 255 / 0.85);
+}

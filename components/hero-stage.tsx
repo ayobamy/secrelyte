@@ -27,7 +27,7 @@ export function HeroStage({ children }: { children: ReactNode }) {
   return (
     <section
       ref={ref}
-      className="hero-stage relative mx-auto grid max-w-6xl items-center gap-14 px-6 pt-16 pb-24 lg:min-h-[calc(100dvh-5.5rem)] lg:grid-cols-12 lg:gap-12 lg:pt-20 lg:pb-28"
+      className="hero-stage relative mx-auto grid max-w-6xl grid-cols-1 items-center gap-14 overflow-x-clip px-6 pt-16 pb-24 lg:min-h-[calc(100dvh-5.5rem)] lg:grid-cols-12 lg:gap-12 lg:pt-20 lg:pb-28"
     >
       <div className="hero-orb" aria-hidden />
       {children}
