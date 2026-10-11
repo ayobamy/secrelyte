@@ -1,6 +1,7 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import { HERO_BODY, HERO_HEADLINE } from '../lib/brand/hero-copy';
 import { DEMO_SECRET } from '../lib/brand/landing-content';
+import { pauseClock } from './helpers/clock';
 
 function isFirstParty(url: string) {
   return (
@@ -23,6 +24,43 @@ async function gotoHome(page: Page) {
       window.matchMedia('(prefers-reduced-motion: reduce)').matches ||
       document.documentElement.classList.contains('motion-ready'),
   );
+}
+
+/**
+ * Scrolls `target` into view and waits for its scroll-reveal to finish, then returns it.
+ *
+ * Off-screen sections rest 18px low until revealed. Playwright checks an element is stable
+ * before scrolling to it, and the scroll then starts the reveal, so a click could land while
+ * the element is still sliding up: under parallel load that missed about one click in three.
+ * Only CSS transitions are awaited, because the page also runs endless decorative animations
+ * that never finish.
+ */
+async function settled(target: Locator): Promise<Locator> {
+  await target.scrollIntoViewIfNeeded();
+  await expect
+    .poll(() =>
+      target.evaluate((el) => {
+        if (!document.documentElement.classList.contains('motion-ready')) return true;
+        for (
+          let n = el.closest('[data-reveal]');
+          n;
+          n = n.parentElement?.closest('[data-reveal]') ?? null
+        ) {
+          if (!n.hasAttribute('data-shown')) return false;
+        }
+        return true;
+      }),
+    )
+    .toBe(true);
+  await target.evaluate(() =>
+    Promise.allSettled(
+      document
+        .getAnimations()
+        .filter((a) => a instanceof CSSTransition)
+        .map((a) => a.finished),
+    ),
+  );
+  return target;
 }
 
 /** Collects CSP violations from both the console and the securitypolicyviolation event. */
@@ -141,11 +179,12 @@ test('home preview remasks at 30s', async ({ page }) => {
   await page.clock.install();
   await gotoHome(page);
   const preview = page.getByRole('figure', { name: /working preview/ });
+  await pauseClock(page);
   await page.getByRole('button', { name: 'Reveal for 30s' }).click();
   await expect(preview.getByText(DEMO_SECRET)).toBeVisible();
-  await page.clock.fastForward(29_000);
+  await page.clock.runFor(29_000);
   await expect(preview.getByText(DEMO_SECRET)).toBeVisible();
-  await page.clock.fastForward(1_500);
+  await page.clock.runFor(1_500);
   await expect(preview.getByText(DEMO_SECRET)).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Reveal for 30s' })).toBeVisible();
 });
@@ -181,7 +220,7 @@ test('the Claude section is labelled Next and its confirmation card sends nothin
   const claude = page.getByRole('region', { name: /Claude will see names, never values/ });
   await expect(claude.getByText('Next', { exact: true }).first()).toBeVisible();
   await expect(claude.getByText(/^This part is Next, not live\. When it ships,/)).toBeVisible();
-  await claude.getByRole('button', { name: 'Send link' }).click();
+  await (await settled(claude.getByRole('button', { name: 'Send link' }))).click();
   await expect(claude.getByText(/nothing was sent/).last()).toBeVisible();
   await expect(claude.getByRole('button', { name: 'Show the card again' })).toBeFocused();
   await page.keyboard.press('Enter');
@@ -290,10 +329,10 @@ test('Escape hides a revealed value', async ({ page }) => {
 
 test('Next previews in how it works respond without acting', async ({ page }) => {
   await gotoHome(page);
-  await page.getByRole('tab', { name: /Send/ }).click();
+  await (await settled(page.getByRole('tab', { name: /Send/ }))).click();
   const panel = page.getByRole('tabpanel', { name: /Send/ });
-  await panel.getByRole('button', { name: 'Create link' }).click();
+  await (await settled(panel.getByRole('button', { name: 'Create link' }))).click();
   await expect(panel.getByText(/Preview only\. Share links are Next/).first()).toBeVisible();
-  await page.getByRole('button', { name: /Continue to Watch/ }).click();
+  await (await settled(page.getByRole('button', { name: /Continue to Watch/ }))).click();
   await expect(page.getByRole('tab', { name: /Watch/ })).toHaveAttribute('aria-selected', 'true');
 });

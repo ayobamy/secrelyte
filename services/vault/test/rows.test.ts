@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AuthenticationError, sodiumReady } from '@/services/crypto';
+import { sodiumReady } from '@/services/crypto';
 import {
   assembleSignupMaterial,
   bytesToPgHex,
@@ -9,6 +9,7 @@ import {
   sealSecretValue,
   secretInsertRow,
   unlockKeys,
+  withProductDek,
   wrapNewProductDek,
 } from '@/services/vault';
 import { hexToBytes } from '../src/envelope';
@@ -62,12 +63,17 @@ describe('the PostgREST wire model', () => {
 });
 
 describe('product rows', () => {
-  it('a raw wrapped DEK does not survive the wire', async () => {
+  // A raw array is stored as JSON text; the earlier wire-model test shows the bytes. It still
+  // opens, but only because openProductDek decodes that legacy shape and then authenticates it.
+  it('a raw wrapped DEK reaches the database as JSON text, readable only through the legacy decoder', async () => {
     await unlockedVault();
-    const { wrapped } = await wrapNewProductDek(PRODUCT_ID);
-    await expect(openProductDek(PRODUCT_ID, throughPostgrest(wrapped))).rejects.toBeInstanceOf(
-      AuthenticationError,
-    );
+    const { dek, wrapped } = await wrapNewProductDek(PRODUCT_ID);
+    const original = Array.from(dek);
+    const stored = throughPostgrest(wrapped);
+    expect(new TextDecoder().decode(hexToBytes(stored)).startsWith('{"0":')).toBe(true);
+    await withProductDek(PRODUCT_ID, stored, async (opened) => {
+      expect(Array.from(opened)).toEqual(original);
+    });
   });
 
   it('a productInsertRow survives the wire and still unwraps the same DEK', async () => {

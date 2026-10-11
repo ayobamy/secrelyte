@@ -7,8 +7,12 @@ import { bytesToPgHex } from '@/lib/bytea';
  * Handing supabase-js a raw Uint8Array does not fail. It JSON-serializes the array as an
  * index-keyed object, `{"0":62,"1":218,...}`, and Postgres stores that text's UTF-8 bytes in
  * the bytea column. The row looks written, but every later read unwraps garbage. That is how
- * product DEK wraps were being stored, which made every secret insert throw. The branded
- * type means an insert row cannot be built from raw bytes by accident.
+ * product DEK wraps were being stored, which made every secret insert throw.
+ *
+ * The branded type keeps a builder's output from being confused with arbitrary strings. It
+ * cannot stop a caller from skipping the builders, because the Supabase client is untyped
+ * here; evals/vault-invariants.eval.ts checks that every bytea insert in the vault UI goes
+ * through one.
  */
 export type PgHex = string & { readonly __brand: 'PgHex' };
 

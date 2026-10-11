@@ -23,7 +23,21 @@ export {
   assertKeysAbsentFromWebStorage,
 } from './keystore';
 export { startIdleLock } from './idle';
-export { wrapNewProductDek, openProductDek, discardDek } from './products';
+export {
+  wrapNewProductDek,
+  openProductDek,
+  discardDek,
+  createProductWrap,
+  withProductDek,
+  legacyJsonWrapBytes,
+} from './products';
+export {
+  createClipboardGuard,
+  browserClipboardDeps,
+  type ClipboardDeps,
+  type ClipboardGuard,
+  type ClipboardState,
+} from './clipboard';
 export { sealSecretValue, openSecretValue } from './secrets';
 export {
   productInsertRow,

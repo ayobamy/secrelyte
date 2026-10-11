@@ -10,6 +10,7 @@ export default defineConfig({
       'app/**/*.test.ts',
       'services/**/test/**/*.test.ts',
       'scripts/**/*.test.ts',
+      'e2e/**/*.test.ts',
       'evals/**/*.eval.ts',
     ],
     globals: false,

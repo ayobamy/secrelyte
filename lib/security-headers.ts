@@ -36,7 +36,7 @@ export function buildCsp(opts: {
     `img-src 'self' data:;`,
     `font-src 'self';`,
     `connect-src ${connect};`,
-    // Argon2id runs in a same-origin module worker (services/crypto/src/kdf.ts). Without
+    // Argon2id runs in a same-origin worker (services/crypto/src/kdf.ts). Without
     // this directive, worker loads fall back child-src -> script-src -> default-src (CSP3),
     // so they would resolve against script-src, whose 'strict-dynamic' has no documented
     // behaviour for `new Worker()`. Chromium allows it today; pinning worker-src keeps signup,

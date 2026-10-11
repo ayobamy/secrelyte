@@ -21,15 +21,27 @@ test('vault RSC flight has no secret plaintext', async ({ page }) => {
   expect(body).not.toMatch(/sk_live_[A-Za-z0-9]{8,}/);
 });
 
-// The product's core claim: across a full session, no request carries the secret in any form.
-// "Any form" matters: bytea columns travel hex-encoded, so a plaintext leak through the same
-// path the product wraps once took would never contain the raw string.
-test('no secret value appears in any outbound request', async ({ page }) => {
+// The product's core claim: across a full session, nothing the user types as a secret leaves
+// the browser, in any form or channel the watcher knows (see egress-watch.spec.ts, which proves
+// it catches each one). That covers the stored value, the password (only a derived login key
+// may be sent), and the recovery key in every shape the kit gives it: the phrase, the word
+// list, the base32 fallback and the raw key bytes.
+test('no secret, password or recovery phrase appears in any outbound request', async ({
+  page,
+  context,
+}) => {
   test.skip(!LIVE_VAULT, LIVE_VAULT_REASON);
   test.setTimeout(VAULT_FLOW_TIMEOUT_MS);
-  const violations = watchEgress(page, SENTINEL);
+  const egress = await watchEgress(context);
+  egress.watch('stored secret', SENTINEL);
 
-  await signUpAndOpenVault(page);
+  const credentials = await signUpAndOpenVault(page);
+  egress.watch('password', credentials.password);
+  egress.watch('recovery phrase', credentials.words.join(' '));
+  egress.watch('recovery words', JSON.stringify(credentials.words));
+  egress.watch('recovery key (base32)', credentials.base32);
+  egress.watch('recovery key (bytes)', credentials.rk);
+
   await storeSecret(page, { product: 'Production', name: 'api_key', value: SENTINEL });
 
   // Reading it back completes the session, and proves the stored ciphertext is the secret
@@ -37,5 +49,8 @@ test('no secret value appears in any outbound request', async ({ page }) => {
   await page.getByRole('button', { name: 'Reveal for 30s' }).click();
   await expect(page.getByText(SENTINEL, { exact: true })).toBeVisible();
 
+  const { violations, unreadable } = await egress.finish();
   expect(violations).toEqual([]);
+  // A body the watcher could not read is a blind spot, not a pass.
+  expect(unreadable).toEqual([]);
 });

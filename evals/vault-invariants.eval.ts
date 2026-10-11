@@ -42,14 +42,32 @@ describe('vault invariants eval', () => {
     expect(src).not.toMatch(/EMAIL_BLIND_INDEX_PEPPER/);
   });
 
-  // Every product DEK the vault UI opens or creates is zeroed in a finally, so a throw from
-  // sealing, opening, or the insert cannot leave key material in memory.
-  it('zeroes every product DEK the vault UI acquires, on every path', () => {
+  // The vault UI never holds a raw product DEK. It reads one only inside withProductDek, which
+  // zeroes it on every path, and creates products through createProductWrap, which never
+  // returns the DEK. So zeroization cannot be forgotten at a call site, because there is none.
+  it('never handles a raw product DEK or the clipboard directly', () => {
     const src = readFileSync('components/vault-app.tsx', 'utf8');
-    const acquired = src.match(/await (openProductDek|wrapNewProductDek)\(/g) ?? [];
-    const zeroed = src.match(/finally \{\s*(?:\/\/[^\n]*\n\s*)*await discardDek\(dek\)/g) ?? [];
-    expect(acquired.length).toBeGreaterThan(0);
-    expect(zeroed.length).toBe(acquired.length);
+    for (const raw of [
+      'openProductDek(',
+      'wrapNewProductDek(',
+      'discardDek(',
+      'navigator.clipboard',
+    ]) {
+      expect(src, raw).not.toContain(raw);
+    }
+    expect(src).toContain('withProductDek(');
+    expect(src).toContain('createProductWrap(');
+    expect(src).toContain('createClipboardGuard(');
+  });
+
+  // An error from get_own_keys used to skip the recovery-kit gate and open the vault.
+  it('keeps the vault shut until the recovery-kit gate is confirmed open', () => {
+    const src = readFileSync('components/vault-app.tsx', 'utf8');
+    expect(src).toMatch(/if \(keys\.error \|\| !row\) \{\s*setGate\('failed'\)/);
+    expect(src).toMatch(/if \(!acked && gate !== 'open'\) \{[\s\S]{0,200}return \(/);
+    const ackChecks =
+      src.match(/const \{ error: ackError \} = await supabase\.rpc\('ack_recovery_kit'\)/g) ?? [];
+    expect(ackChecks).toHaveLength(2);
   });
 
   // Raw Uint8Arrays reaching a bytea column over PostgREST are stored as the JSON text of an
@@ -62,7 +80,7 @@ describe('vault invariants eval', () => {
     };
     for (const [table, builder] of Object.entries(builders)) {
       const args = [
-        ...src.matchAll(new RegExp(`from\\('${table}'\\)\\.insert\\(\\s*(\\w+)`, 'g')),
+        ...src.matchAll(new RegExp(`from\\('${table}'\\)\\s*\\.insert\\(\\s*(\\w+)`, 'g')),
       ].map((m) => m[1]);
       expect(args.length, table).toBeGreaterThan(0);
       expect(new Set(args), table).toEqual(new Set([builder]));

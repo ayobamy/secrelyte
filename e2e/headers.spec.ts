@@ -24,11 +24,13 @@ test('share route uses no-referrer to protect a fragment key', async ({ request 
 // chunk, which proxy.ts does not cover, so signup, unlock and password change all failed
 // with ERR_BLOCKED_BY_RESPONSE until next.config.ts added these headers.
 test('static chunks assert COEP whenever a strict route requires it', async ({ request }) => {
+  // Playwright always serves a production build (`pnpm start`), so COEP must be there.
+  for (const path of ['/signup', '/login', '/vault']) {
+    const res = await request.get(path);
+    expect(res.headers()['cross-origin-embedder-policy'], path).toBe('require-corp');
+  }
   const page = await request.get('/signup');
   expect(page.ok()).toBe(true);
-  if (page.headers()['cross-origin-embedder-policy'] !== 'require-corp') {
-    test.skip(true, 'COEP is only sent in production builds');
-  }
   const html = await page.text();
   const chunk = html.match(/\/_next\/static\/chunks\/[^"']+\.js/)?.[0];
   expect(chunk, 'a static chunk referenced from /signup').toBeTruthy();

@@ -15,7 +15,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint:md": "markdownlint-cli2",
-    "typecheck": "next typegen && tsc --noEmit",
+    "typecheck": "next typegen && tsc --noEmit && tsc --noEmit -p tsconfig.tools.json",
     "test": "vitest run",
     "test:unit": "vitest run",
     "test:crypto": "vitest run services/crypto --coverage",

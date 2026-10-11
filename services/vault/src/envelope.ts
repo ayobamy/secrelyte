@@ -1,5 +1,13 @@
-import { fromB64url, toB64url } from '@/services/crypto';
+import { AuthenticationError, fromB64url, toB64url } from '@/services/crypto';
 import type { EnvelopeV1 } from '@/services/crypto';
+
+/*
+ * Every parser here reads bytes the server handed back, and the server is outside the trust
+ * boundary. Bytes that are not even a well-formed envelope cannot authenticate, so they fail
+ * as AuthenticationError, the same as the crypto layer's own malformed-envelope check
+ * (services/crypto/src/aead.ts): the UI then shows the tamper warning, not a generic failure
+ * that lets a server downgrade the alarm by sending garbage instead of a forgery.
+ */
 
 const NONCE_LEN = 24;
 
@@ -14,7 +22,7 @@ export async function envelopeToBytes(envelope: EnvelopeV1): Promise<Uint8Array>
 
 export async function bytesToEnvelope(bytes: Uint8Array, aad: string): Promise<EnvelopeV1> {
   if (bytes.byteLength <= NONCE_LEN) {
-    throw new RangeError('wrap blob too short');
+    throw new AuthenticationError('wrap blob too short');
   }
   const nonce = bytes.subarray(0, NONCE_LEN);
   const ct = bytes.subarray(NONCE_LEN);
@@ -29,8 +37,9 @@ export async function bytesToEnvelope(bytes: Uint8Array, aad: string): Promise<E
 
 export function hexToBytes(hex: string): Uint8Array {
   const raw = hex.startsWith('\\x') ? hex.slice(2) : hex.startsWith('0x') ? hex.slice(2) : hex;
-  if (raw.length % 2 !== 0) {
-    throw new RangeError('odd hex length');
+  // parseInt reads a non-hex pair as NaN, which a Uint8Array stores as 0: reject instead.
+  if (raw.length % 2 !== 0 || !/^[0-9a-fA-F]*$/.test(raw)) {
+    throw new AuthenticationError('stored bytes are not hex');
   }
   const out = new Uint8Array(raw.length / 2);
   for (let i = 0; i < out.length; i += 1) {
@@ -47,7 +56,7 @@ export function bytesFromWire(value: unknown): Uint8Array {
       return hexToBytes(value);
     }
   }
-  throw new TypeError('unsupported bytea wire type');
+  throw new AuthenticationError('unsupported bytea wire type');
 }
 
 export { bytesToPgHex } from '@/lib/bytea';

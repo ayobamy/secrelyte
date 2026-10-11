@@ -26,6 +26,7 @@ describe('schema invariants eval', () => {
       '0011_vault_key_rpcs.sql',
       '0012_service_role_user_keys.sql',
       '0013_store_signup_keys.sql',
+      '0014_repair_legacy_json_wraps.sql',
     ]);
   });
 

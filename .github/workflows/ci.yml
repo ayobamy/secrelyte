@@ -136,6 +136,7 @@ jobs:
   # where they run, including the no-plaintext-egress test the product's claim rests on.
   vault-e2e:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -151,15 +152,20 @@ jobs:
       - name: Install (locked, no scripts)
         run: pnpm install --frozen-lockfile --ignore-scripts
 
-      - uses: supabase/setup-cli@ab058987d8d6c725971f6cf9d0b5c98467e30bd1 # v1
-        with:
-          version: 2.116.0
-
+      # The pinned devDependency, the same CLI scripts/test-vault-e2e.sh drives.
       - name: Start local Supabase
-        run: supabase start
+        run: pnpm exec supabase start
 
       - name: Playwright browser
         run: pnpm exec playwright install --with-deps chromium
 
-      - name: Vault E2E (no plaintext egress, reveal and clipboard timing)
+      - name: Vault E2E (no plaintext egress, timing, failure paths)
         run: pnpm test:e2e:vault
+
+      - name: Traces from a failed run
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: vault-e2e-test-results
+          path: test-results/
+          retention-days: 7

@@ -64,6 +64,46 @@ describe('securityHeaders + grade', () => {
     expect(gradeHeaders(headers, { requireHsts: true }).grade).toBe('A');
   });
 
+  // Cross-origin isolation on the routes that hold keys. Removing it used to leave every test
+  // green; next.config.ts has to send the same header on /_next/static or the Argon2id worker
+  // cannot start.
+  it('sends COEP require-corp on strict routes in production only', () => {
+    const prodStrict = securityHeaders({
+      pathname: '/signup',
+      nonce: 'n',
+      isDev: false,
+      isProd: true,
+      supabaseOrigin: null,
+    });
+    expect(prodStrict['Cross-Origin-Embedder-Policy']).toBe('require-corp');
+    for (const pathname of ['/vault', '/login', '/s/token']) {
+      expect(
+        securityHeaders({ pathname, nonce: 'n', isDev: false, isProd: true, supabaseOrigin: null })[
+          'Cross-Origin-Embedder-Policy'
+        ],
+        pathname,
+      ).toBe('require-corp');
+    }
+    expect(
+      securityHeaders({
+        pathname: '/',
+        nonce: 'n',
+        isDev: false,
+        isProd: true,
+        supabaseOrigin: null,
+      })['Cross-Origin-Embedder-Policy'],
+    ).toBeUndefined();
+    expect(
+      securityHeaders({
+        pathname: '/signup',
+        nonce: 'n',
+        isDev: true,
+        isProd: false,
+        supabaseOrigin: null,
+      })['Cross-Origin-Embedder-Policy'],
+    ).toBeUndefined();
+  });
+
   it('omits HSTS on localhost so local HTTPS is not forced', () => {
     const headers = securityHeaders({
       pathname: '/',

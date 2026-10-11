@@ -1,20 +1,21 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AuthenticationError } from '@/services/crypto';
 import {
   AuthUpdatePendingError,
   CLIPBOARD_CLEAR_MS,
   applyPasswordChange,
   assertKeysAbsentFromWebStorage,
+  browserClipboardDeps,
   buildRecoveryKitPdf,
   bytesFromWire,
   bytesToPgHex,
-  discardDek,
+  createClipboardGuard,
+  createProductWrap,
   downloadBytes,
   isUnlocked,
   lockKeys,
-  openProductDek,
   productInsertRow,
   secretInsertRow,
   openSecretValue,
@@ -27,7 +28,9 @@ import {
   subscribeUnlocked,
   unlockKeys,
   verifyChallenge,
-  wrapNewProductDek,
+  withProductDek,
+  type ClipboardGuard,
+  type ClipboardState,
 } from '@/services/vault';
 import { takePendingKit as takeKit, takePendingKeys as takeKeys } from '@/components/auth-forms';
 import { createBrowserSupabase } from '@/lib/supabase/browser';
@@ -40,6 +43,47 @@ import { formatRevealSeconds, revealRemaining } from '@/lib/reveal-timer';
 
 function wallNow(): number {
   return Date.now();
+}
+
+function productKeyError(err: unknown, tamper: string, fallback: string): string {
+  return err instanceof AuthenticationError ? tamper : fallback;
+}
+
+const CLIPBOARD_MESSAGE: Record<ClipboardState, string> = {
+  idle: '',
+  // "Tries": a browser can refuse a write that no click asked for, and the message then
+  // switches to clear-pending. Nothing here promises a clear the browser decides.
+  holding: `Copied. Secrelyte tries to clear the clipboard in ${CLIPBOARD_CLEAR_MS / 1000} seconds while this tab is open.`,
+  'clear-pending':
+    'The clipboard still holds the secret. Clear it now. Secrelyte also retries when you return to this tab.',
+  cleared: 'Clipboard cleared.',
+};
+
+/**
+ * The clipboard's status, and a way to clear it by hand. A click counts as user activation,
+ * which some browsers require for any clipboard write, so the button works even where the
+ * timed clear is refused.
+ */
+function ClipboardNotice({ clip, onClear }: { clip: ClipboardState; onClear: () => void }) {
+  return (
+    <>
+      <p
+        role="status"
+        className={`mt-4 text-sm empty:mt-0 ${clip === 'clear-pending' ? 'text-exposed-ink' : 'text-muted'}`}
+      >
+        {CLIPBOARD_MESSAGE[clip]}
+      </p>
+      {clip === 'holding' || clip === 'clear-pending' ? (
+        <button
+          type="button"
+          onClick={onClear}
+          className="mt-2 text-sm font-medium text-ink underline decoration-line underline-offset-4"
+        >
+          Clear clipboard now
+        </button>
+      ) : null}
+    </>
+  );
 }
 
 type ProductRow = {
@@ -65,10 +109,14 @@ export function VaultApp() {
   const [acked, setAcked] = useState(false);
   const [phraseAck, setPhraseAck] = useState(false);
   const [answers, setAnswers] = useState<Record<number, string>>({});
-  const [needsPhrase, setNeedsPhrase] = useState(false);
+  // The vault stays shut until get_own_keys confirms the kit was acknowledged.
+  const [gate, setGate] = useState<'checking' | 'phrase' | 'open' | 'failed'>('checking');
   const [recoveryWrap, setRecoveryWrap] = useState<unknown>(null);
   const [phrase, setPhrase] = useState('');
   const [kitError, setKitError] = useState<string | null>(null);
+  // Above the lock boundary, so locking can clear a copied secret and the notice survives it.
+  const [clip, setClip] = useState<ClipboardState>('idle');
+  const clipboard = useRef<ClipboardGuard | null>(null);
   const challenge = useMemo(() => (kit ? pickChallengeIndices(kit.words.length, 3) : []), [kit]);
 
   useEffect(() => {
@@ -86,17 +134,46 @@ export function VaultApp() {
   }, []);
 
   useEffect(() => {
-    if (!unlocked || kit) return;
+    const guard = createClipboardGuard(browserClipboardDeps(), setClip);
+    clipboard.current = guard;
+    return () => {
+      void guard.clearNow();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!unlocked) void clipboard.current?.clearNow();
+  }, [unlocked]);
+
+  function clearClipboard() {
+    void clipboard.current?.clearNow();
+  }
+
+  function copyToClipboard(value: string): Promise<void> {
+    return clipboard.current
+      ? clipboard.current.copy(value)
+      : Promise.reject(new Error('CLIPBOARD_UNAVAILABLE'));
+  }
+
+  useEffect(() => {
+    if (!unlocked || kit || acked) return;
     void (async () => {
       const supabase = createBrowserSupabase();
       const keys = await supabase.rpc('get_own_keys');
       const row = Array.isArray(keys.data) ? keys.data[0] : keys.data;
-      if (row && row.recovery_ack_at == null) {
-        setNeedsPhrase(true);
-        setRecoveryWrap(row.recovery_wrapped_vault_key);
+      // Fail closed: an error, or an unlocked session with no key row, keeps the vault shut.
+      if (keys.error || !row) {
+        setGate('failed');
+        return;
       }
+      if (row.recovery_ack_at == null) {
+        setRecoveryWrap(row.recovery_wrapped_vault_key);
+        setGate('phrase');
+        return;
+      }
+      setGate('open');
     })();
-  }, [unlocked, kit]);
+  }, [unlocked, kit, acked]);
 
   async function downloadKit() {
     if (!kit) return;
@@ -122,7 +199,11 @@ export function VaultApp() {
       return;
     }
     const supabase = createBrowserSupabase();
-    await supabase.rpc('ack_recovery_kit');
+    const { error: ackError } = await supabase.rpc('ack_recovery_kit');
+    if (ackError) {
+      setKitError('Could not record that you stored the kit. Check your connection and try again.');
+      return;
+    }
     setAcked(true);
     setKit(null);
   }
@@ -136,9 +217,13 @@ export function VaultApp() {
       return;
     }
     const supabase = createBrowserSupabase();
-    await supabase.rpc('ack_recovery_kit');
+    const { error: ackError } = await supabase.rpc('ack_recovery_kit');
+    if (ackError) {
+      setKitError('Could not record the confirmation. Check your connection and try again.');
+      return;
+    }
     setAcked(true);
-    setNeedsPhrase(false);
+    setGate('open');
   }
 
   if (kit && !acked) {
@@ -179,7 +264,11 @@ export function VaultApp() {
                 />
               </label>
             ))}
-            {kitError ? <p className="text-sm text-exposed-ink">{kitError}</p> : null}
+            {kitError ? (
+              <p role="alert" className="text-sm text-exposed-ink">
+                {kitError}
+              </p>
+            ) : null}
             <button
               type="submit"
               disabled={!downloaded || !phraseAck}
@@ -193,7 +282,7 @@ export function VaultApp() {
     );
   }
 
-  if (needsPhrase && !acked) {
+  if (unlocked && gate === 'phrase' && !acked) {
     return (
       <div className="flex min-h-full flex-col">
         <SiteHeader variant="app" current="vault" />
@@ -213,7 +302,11 @@ export function VaultApp() {
                 className="mt-1 w-full rounded-2xl border border-line bg-base px-4 py-3 font-mono text-sm"
               />
             </label>
-            {kitError ? <p className="text-sm text-exposed-ink">{kitError}</p> : null}
+            {kitError ? (
+              <p role="alert" className="text-sm text-exposed-ink">
+                {kitError}
+              </p>
+            ) : null}
             <button type="submit" className="rounded-full bg-ink px-5 py-3 text-paper">
               Confirm kit
             </button>
@@ -229,16 +322,55 @@ export function VaultApp() {
         <LightField />
         <SiteHeader variant="app" current="vault" />
         <main id="content" className="flex-1">
+          {clip !== 'idle' ? (
+            <div className="mx-auto w-full max-w-2xl px-6 pt-8">
+              <ClipboardNotice clip={clip} onClear={clearClipboard} />
+            </div>
+          ) : null}
           <LockedVault />
         </main>
       </div>
     );
   }
 
-  return <UnlockedVault />;
+  if (!acked && gate !== 'open') {
+    return (
+      <div className="flex min-h-full flex-col">
+        <SiteHeader variant="app" current="vault" />
+        <main
+          id="content"
+          aria-busy={gate === 'checking'}
+          className="mx-auto w-full max-w-xl flex-1 px-6 py-16"
+        >
+          <h1 className="text-3xl font-semibold tracking-tight">Vault</h1>
+          {gate === 'failed' ? (
+            <p role="alert" className="mt-4 text-[17px] leading-7 text-exposed-ink">
+              Could not check your recovery kit, so the vault stays closed. Reload to try again.
+            </p>
+          ) : (
+            <p role="status" className="mt-4 text-sm text-muted">
+              Checking your recovery kit.
+            </p>
+          )}
+        </main>
+      </div>
+    );
+  }
+
+  return (
+    <UnlockedVault clip={clip} copyToClipboard={copyToClipboard} clearClipboard={clearClipboard} />
+  );
 }
 
-function UnlockedVault() {
+function UnlockedVault({
+  clip,
+  copyToClipboard,
+  clearClipboard,
+}: {
+  clip: ClipboardState;
+  copyToClipboard: (value: string) => Promise<void>;
+  clearClipboard: () => void;
+}) {
   const [products, setProducts] = useState<ProductRow[]>([]);
   const [secrets, setSecrets] = useState<SecretRow[]>([]);
   const [productName, setProductName] = useState('Production');
@@ -253,6 +385,7 @@ function UnlockedVault() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [pwMsg, setPwMsg] = useState<string | null>(null);
   const [pendingAuth, setPendingAuth] = useState(false);
+  const [loadState, setLoadState] = useState<'loading' | 'ready' | 'failed'>('loading');
   const pwStrength = newPassword ? scorePassword(newPassword) : null;
   const remaining = startedAt === null ? 0 : revealRemaining(startedAt, now);
   const revealed = revealedValue !== null && remaining > 0 ? revealedValue : null;
@@ -263,9 +396,15 @@ function UnlockedVault() {
       supabase.from('products').select('id,name,wrapped_dek,environment'),
       supabase.from('secrets').select('id,product_id,key_name,ciphertext,nonce,version'),
     ]).then(([p, s]) => {
+      // A failed read must not render as an empty vault: that looks like data loss.
+      if (p.error || s.error) {
+        setLoadState('failed');
+        return;
+      }
       setProducts((p.data ?? []) as ProductRow[]);
       setSecrets((s.data ?? []) as SecretRow[]);
       setSelected((current) => current ?? p.data?.[0]?.id ?? null);
+      setLoadState('ready');
     });
   }, []);
 
@@ -296,9 +435,14 @@ function UnlockedVault() {
     const s = await supabase
       .from('secrets')
       .select('id,product_id,key_name,ciphertext,nonce,version');
+    if (p.error || s.error) {
+      setError('Saved, but the list could not reload. Reload the page to see it.');
+      return;
+    }
     setProducts((p.data ?? []) as ProductRow[]);
     setSecrets((s.data ?? []) as SecretRow[]);
     setSelected((current) => current ?? p.data?.[0]?.id ?? null);
+    setLoadState('ready');
   }
 
   async function addProduct(e: React.FormEvent) {
@@ -313,21 +457,16 @@ function UnlockedVault() {
     }
     const id = crypto.randomUUID();
     try {
-      const { dek, wrapped } = await wrapNewProductDek(id);
-      let insertError: unknown;
-      try {
-        ({ error: insertError } = await supabase.from('products').insert(
-          productInsertRow({
-            id,
-            userId,
-            name: productName,
-            environment: 'production',
-            wrappedDek: wrapped,
-          }),
-        ));
-      } finally {
-        await discardDek(dek);
-      }
+      const wrapped = await createProductWrap(id);
+      const { error: insertError } = await supabase.from('products').insert(
+        productInsertRow({
+          id,
+          userId,
+          name: productName,
+          environment: 'production',
+          wrappedDek: wrapped,
+        }),
+      );
       if (insertError) {
         setError('Could not save the product. Nothing was stored.');
         return;
@@ -348,18 +487,19 @@ function UnlockedVault() {
     }
     const id = crypto.randomUUID();
     try {
-      const dek = await openProductDek(product.id, product.wrapped_dek);
-      let insertError: unknown;
-      try {
-        const sealed = await sealSecretValue({
+      // The DEK is live only while sealing; it is zeroed before the network insert.
+      const sealed = await withProductDek(product.id, product.wrapped_dek, (dek) =>
+        sealSecretValue({
           dek,
           productId: product.id,
           secretId: id,
           version: 1,
           value: secretValue,
-        });
-        const supabase = createBrowserSupabase();
-        ({ error: insertError } = await supabase.from('secrets').insert(
+        }),
+      );
+      const { error: insertError } = await createBrowserSupabase()
+        .from('secrets')
+        .insert(
           secretInsertRow({
             id,
             productId: product.id,
@@ -368,11 +508,7 @@ function UnlockedVault() {
             ciphertext: sealed.ciphertext,
             nonce: sealed.nonce,
           }),
-        ));
-      } finally {
-        // Zeroed on every path, including a throw from seal or the insert.
-        await discardDek(dek);
-      }
+        );
       if (insertError) {
         // The value stays in the box so the paste is not lost.
         setError('Could not store the secret. Nothing was saved.');
@@ -382,9 +518,11 @@ function UnlockedVault() {
       await refresh();
     } catch (err) {
       setError(
-        err instanceof AuthenticationError
-          ? 'Tamper warning. This product key did not authenticate.'
-          : 'Could not store the secret. Nothing was saved.',
+        productKeyError(
+          err,
+          'Tamper warning. This product key did not authenticate.',
+          'Could not store the secret. Nothing was saved.',
+        ),
       );
     }
   }
@@ -397,37 +535,35 @@ function UnlockedVault() {
       return;
     }
     try {
-      const dek = await openProductDek(product.id, product.wrapped_dek);
-      let value: string;
-      try {
-        value = await openSecretValue({
+      const value = await withProductDek(product.id, product.wrapped_dek, (dek) =>
+        openSecretValue({
           dek,
           productId: product.id,
           secretId: secret.id,
           version: secret.version,
           ciphertext: bytesFromWire(secret.ciphertext),
           nonce: bytesFromWire(secret.nonce),
-        });
-      } finally {
-        // A tampered ciphertext throws here; the DEK is zeroed regardless.
-        await discardDek(dek);
-      }
+        }),
+      );
       startReveal(value);
     } catch (err) {
       setError(
-        err instanceof AuthenticationError
-          ? 'Tamper warning. This ciphertext did not authenticate.'
-          : 'Reveal failed.',
+        productKeyError(
+          err,
+          'Tamper warning. This ciphertext did not authenticate.',
+          'Reveal failed.',
+        ),
       );
     }
   }
 
   async function copyRevealed() {
     if (!revealed) return;
-    await navigator.clipboard.writeText(revealed);
-    window.setTimeout(() => {
-      void navigator.clipboard.writeText('');
-    }, CLIPBOARD_CLEAR_MS);
+    try {
+      await copyToClipboard(revealed);
+    } catch {
+      setError('Could not copy. Select the value and copy it by hand.');
+    }
   }
 
   async function changePassword(e: React.FormEvent) {
@@ -441,7 +577,10 @@ function UnlockedVault() {
     const supabase = createBrowserSupabase();
     const session = await supabase.auth.getUser();
     const email = session.data.user?.email;
-    if (!email) return;
+    if (!email) {
+      setError('Your session ended. Unlock again to change the password.');
+      return;
+    }
     try {
       await applyPasswordChange({
         email,
@@ -574,7 +713,7 @@ function UnlockedVault() {
           </ul>
 
           {revealed ? (
-            <div className="mt-8 rounded-2xl border border-line bg-paper p-4">
+            <div className="mt-8 rounded-2xl border border-exposed bg-paper p-4">
               <p className="font-mono text-sm break-all">{revealed}</p>
               <div className="mt-3 flex gap-3 text-sm">
                 <button type="button" onClick={() => void copyRevealed()}>
@@ -594,10 +733,18 @@ function UnlockedVault() {
             </div>
           ) : null}
 
+          <ClipboardNotice clip={clip} onClear={clearClipboard} />
+
+          {loadState === 'failed' ? (
+            <p role="alert" className="mt-8 text-sm text-exposed-ink">
+              Could not load your vault. Reload to try again.
+            </p>
+          ) : null}
+
           {error ? <p className="mt-4 text-sm text-exposed-ink">{error}</p> : null}
           {pwMsg ? <p className="mt-4 text-sm text-muted">{pwMsg}</p> : null}
 
-          {products.length === 0 ? (
+          {loadState === 'ready' && products.length === 0 ? (
             <div className="flex flex-1 flex-col justify-center py-16">
               <p className="max-w-md text-[17px] leading-7 text-muted">
                 Empty. Paste a messy block. Ciphertext only leaves the browser.
