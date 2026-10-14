@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { AuthenticationError } from '@/services/crypto';
 import {
   AuthUpdatePendingError,
-  CLIPBOARD_CLEAR_MS,
+  IDLE_LOCK_MS,
   applyPasswordChange,
   assertKeysAbsentFromWebStorage,
   browserClipboardDeps,
@@ -32,14 +32,36 @@ import {
   type ClipboardGuard,
   type ClipboardState,
 } from '@/services/vault';
-import { takePendingKit as takeKit, takePendingKeys as takeKeys } from '@/components/auth-forms';
+import {
+  clearPendingKit,
+  peekPendingKit,
+  takePendingKeys as takeKeys,
+} from '@/components/auth-forms';
 import { createBrowserSupabase } from '@/lib/supabase/browser';
+import { AppFooter, AuthShell, Card, CardBody, CardFactBand } from '@/components/auth-shell';
 import { SiteHeader } from '@/components/site-header';
-import { VaultComposer } from '@/components/vault-composer';
 import { LockedVault } from '@/components/locked-vault';
-import { LightField } from '@/components/light-field';
-import { PasswordField } from '@/components/password-field';
-import { formatRevealSeconds, revealRemaining } from '@/lib/reveal-timer';
+import { PhraseCheckScreen, RecoveryKitScreen } from '@/components/recovery-kit';
+import { PasswordPanel, ProductForm, SecretForm } from '@/components/vault-forms';
+import {
+  ClipboardNotice,
+  EmptyProducts,
+  KeyRow,
+  NoKeys,
+  ProductHeader,
+  ProductList,
+  RowsSkeleton,
+} from '@/components/vault-parts';
+import {
+  ArrowDot,
+  Eyebrow,
+  InlineAlert,
+  LOCK_BUTTON,
+  PRIMARY_BUTTON,
+  SMALL_INK,
+  StateDot,
+} from '@/components/ui';
+import { revealRemaining } from '@/lib/reveal-timer';
 
 function wallNow(): number {
   return Date.now();
@@ -49,42 +71,7 @@ function productKeyError(err: unknown, tamper: string, fallback: string): string
   return err instanceof AuthenticationError ? tamper : fallback;
 }
 
-const CLIPBOARD_MESSAGE: Record<ClipboardState, string> = {
-  idle: '',
-  // "Tries": a browser can refuse a write that no click asked for, and the message then
-  // switches to clear-pending. Nothing here promises a clear the browser decides.
-  holding: `Copied. Secrelyte tries to clear the clipboard in ${CLIPBOARD_CLEAR_MS / 1000} seconds while this tab is open.`,
-  'clear-pending':
-    'The clipboard still holds the secret. Clear it now. Secrelyte also retries when you return to this tab.',
-  cleared: 'Clipboard cleared.',
-};
-
-/**
- * The clipboard's status, and a way to clear it by hand. A click counts as user activation,
- * which some browsers require for any clipboard write, so the button works even where the
- * timed clear is refused.
- */
-function ClipboardNotice({ clip, onClear }: { clip: ClipboardState; onClear: () => void }) {
-  return (
-    <>
-      <p
-        role="status"
-        className={`mt-4 text-sm empty:mt-0 ${clip === 'clear-pending' ? 'text-exposed-ink' : 'text-muted'}`}
-      >
-        {CLIPBOARD_MESSAGE[clip]}
-      </p>
-      {clip === 'holding' || clip === 'clear-pending' ? (
-        <button
-          type="button"
-          onClick={onClear}
-          className="mt-2 text-sm font-medium text-ink underline decoration-line underline-offset-4"
-        >
-          Clear clipboard now
-        </button>
-      ) : null}
-    </>
-  );
-}
+const IDLE_MINUTES = IDLE_LOCK_MS / 60_000;
 
 type ProductRow = {
   id: string;
@@ -102,9 +89,13 @@ type SecretRow = {
   version: number;
 };
 
+/** Where a failure renders: beside the form or row that caused it. */
+type ErrorSlot = 'product' | 'secret' | 'workspace' | 'password';
+
 export function VaultApp() {
+  const ids = useId();
   const [unlocked, setUnlocked] = useState(isUnlocked());
-  const [kit, setKit] = useState(() => takeKit());
+  const [kit, setKit] = useState(() => peekPendingKit());
   const [downloaded, setDownloaded] = useState(false);
   const [acked, setAcked] = useState(false);
   const [phraseAck, setPhraseAck] = useState(false);
@@ -114,6 +105,7 @@ export function VaultApp() {
   const [recoveryWrap, setRecoveryWrap] = useState<unknown>(null);
   const [phrase, setPhrase] = useState('');
   const [kitError, setKitError] = useState<string | null>(null);
+  const [kitSignedOut, setKitSignedOut] = useState(false);
   // Above the lock boundary, so locking can clear a copied secret and the notice survives it.
   const [clip, setClip] = useState<ClipboardState>('idle');
   const clipboard = useRef<ClipboardGuard | null>(null);
@@ -175,6 +167,25 @@ export function VaultApp() {
     })();
   }, [unlocked, kit, acked]);
 
+  // Until the PDF is saved the kit exists only in this tab, and a reload or a closed tab would
+  // leave an account whose 24 words were never kept. Ask first. (In-app navigation keeps the
+  // kit: see peekPendingKit.)
+  useEffect(() => {
+    if (!kit || downloaded) return;
+    const hold = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener('beforeunload', hold);
+    return () => window.removeEventListener('beforeunload', hold);
+  }, [kit, downloaded]);
+
+  // Recording the kit needs a session. Signup goes on to the kit without one when its sign-in
+  // failed or the address must be confirmed first, so find out before the three steps.
+  useEffect(() => {
+    if (!kit) return;
+    void createBrowserSupabase()
+      .auth.getSession()
+      .then(({ data }) => setKitSignedOut(!data.session));
+  }, [kit]);
+
   async function downloadKit() {
     if (!kit) return;
     const pdf = await buildRecoveryKitPdf({
@@ -185,6 +196,8 @@ export function VaultApp() {
     });
     downloadBytes('secrelyte-recovery-kit.pdf', pdf, 'application/pdf');
     setDownloaded(true);
+    // Saved: from here a lost tab is recoverable through Unlock and the phrase check.
+    clearPendingKit();
   }
 
   async function confirmKit(e: React.FormEvent) {
@@ -199,6 +212,14 @@ export function VaultApp() {
       return;
     }
     const supabase = createBrowserSupabase();
+    // Signup goes on to the kit even when its sign-in failed (see auth-forms.tsx), and with no
+    // session the acknowledgement fails on every retry. Say so and point at Unlock instead.
+    const { data } = await supabase.auth.getSession();
+    setKitSignedOut(!data.session);
+    if (!data.session) {
+      setKitError(null);
+      return;
+    }
     const { error: ackError } = await supabase.rpc('ack_recovery_kit');
     if (ackError) {
       setKitError('Could not record that you stored the kit. Check your connection and try again.');
@@ -228,132 +249,91 @@ export function VaultApp() {
 
   if (kit && !acked) {
     return (
-      <div className="flex min-h-full flex-col">
-        <SiteHeader variant="app" current="vault" />
-        <main id="content" className="mx-auto w-full max-w-xl flex-1 px-6 py-16">
-          <p className="text-xs font-medium tracking-[0.2em] text-muted uppercase">Blocking</p>
-          <h1 className="mt-3 text-3xl font-semibold tracking-tight">Recovery kit</h1>
-          <p className="mt-4 text-[17px] leading-7 text-muted">
-            Secrelyte cannot recover this vault. Download the PDF, store it, then type three words
-            from it.
-          </p>
-          <button
-            type="button"
-            onClick={() => void downloadKit()}
-            className="mt-8 rounded-full bg-ink px-5 py-3 text-paper"
-          >
-            Download PDF
-          </button>
-          <form onSubmit={(e) => void confirmKit(e)} className="mt-10 space-y-4">
-            <label className="flex items-start gap-3 text-sm">
-              <input
-                type="checkbox"
-                checked={phraseAck}
-                onChange={(e) => setPhraseAck(e.target.checked)}
-                className="mt-1"
-              />
-              I stored this somewhere safe. Secrelyte cannot recover my data without it.
-            </label>
-            {challenge.map((index) => (
-              <label key={index} className="block text-sm font-medium">
-                Word {index + 1}
-                <input
-                  value={answers[index] ?? ''}
-                  onChange={(e) => setAnswers((s) => ({ ...s, [index]: e.target.value }))}
-                  className="mt-1 w-full rounded-2xl border border-line bg-base px-4 py-3 font-mono"
-                />
-              </label>
-            ))}
-            {kitError ? (
-              <p role="alert" className="text-sm text-exposed-ink">
-                {kitError}
-              </p>
-            ) : null}
-            <button
-              type="submit"
-              disabled={!downloaded || !phraseAck}
-              className="rounded-full bg-ink px-5 py-3 text-paper disabled:opacity-40"
-            >
-              Open the vault
-            </button>
-          </form>
-        </main>
-      </div>
+      <RecoveryKitScreen
+        ids={ids}
+        downloaded={downloaded}
+        stored={phraseAck}
+        challenge={challenge}
+        answers={answers}
+        error={kitError}
+        signedOut={kitSignedOut}
+        confirmEmail={kit.confirmEmail}
+        onDownload={() => void downloadKit()}
+        onStored={setPhraseAck}
+        onAnswer={(index, value) => {
+          setAnswers((s) => ({ ...s, [index]: value }));
+          setKitError(null);
+        }}
+        onSubmit={(e) => void confirmKit(e)}
+      />
     );
   }
 
   if (unlocked && gate === 'phrase' && !acked) {
     return (
-      <div className="flex min-h-full flex-col">
-        <SiteHeader variant="app" current="vault" />
-        <main id="content" className="mx-auto w-full max-w-xl flex-1 px-6 py-16">
-          <p className="text-xs font-medium tracking-[0.2em] text-muted uppercase">Blocking</p>
-          <h1 className="mt-3 text-3xl font-semibold tracking-tight">Recovery kit</h1>
-          <p className="mt-4 text-[17px] leading-7 text-muted">
-            This vault has no kit acknowledgement. Type the 24-word phrase from your printed sheet.
-          </p>
-          <form onSubmit={(e) => void confirmStoredPhrase(e)} className="mt-10 space-y-4">
-            <label className="block text-sm font-medium">
-              24-word phrase
-              <textarea
-                value={phrase}
-                onChange={(e) => setPhrase(e.target.value)}
-                rows={4}
-                className="mt-1 w-full rounded-2xl border border-line bg-base px-4 py-3 font-mono text-sm"
-              />
-            </label>
-            {kitError ? (
-              <p role="alert" className="text-sm text-exposed-ink">
-                {kitError}
-              </p>
-            ) : null}
-            <button type="submit" className="rounded-full bg-ink px-5 py-3 text-paper">
-              Confirm kit
-            </button>
-          </form>
-        </main>
-      </div>
+      <PhraseCheckScreen
+        ids={ids}
+        phrase={phrase}
+        error={kitError}
+        onPhrase={(value) => {
+          setPhrase(value);
+          setKitError(null);
+        }}
+        onSubmit={(e) => void confirmStoredPhrase(e)}
+      />
     );
   }
 
   if (!unlocked) {
     return (
-      <div className="relative flex min-h-full flex-col">
-        <LightField />
-        <SiteHeader variant="app" current="vault" />
-        <main id="content" className="flex-1">
-          {clip !== 'idle' ? (
-            <div className="mx-auto w-full max-w-2xl px-6 pt-8">
-              <ClipboardNotice clip={clip} onClear={clearClipboard} />
-            </div>
-          ) : null}
-          <LockedVault />
-        </main>
-      </div>
+      <LockedVault
+        notice={
+          clip !== 'idle' ? (
+            <ClipboardNotice clip={clip} onClear={clearClipboard} variant="notice" />
+          ) : null
+        }
+      />
     );
   }
 
   if (!acked && gate !== 'open') {
     return (
-      <div className="flex min-h-full flex-col">
-        <SiteHeader variant="app" current="vault" />
-        <main
-          id="content"
-          aria-busy={gate === 'checking'}
-          className="mx-auto w-full max-w-xl flex-1 px-6 py-16"
-        >
-          <h1 className="text-3xl font-semibold tracking-tight">Vault</h1>
-          {gate === 'failed' ? (
-            <p role="alert" className="mt-4 text-[17px] leading-7 text-exposed-ink">
-              Could not check your recovery kit, so the vault stays closed. Reload to try again.
-            </p>
-          ) : (
-            <p role="status" className="mt-4 text-sm text-muted">
-              Checking your recovery kit.
-            </p>
-          )}
-        </main>
-      </div>
+      <AuthShell
+        header={<SiteHeader variant="app" current="vault" />}
+        eyebrow="This device"
+        title="Vault"
+        lead="One check before the vault opens: that this account's recovery kit was stored."
+        busy={gate === 'checking'}
+      >
+        <Card>
+          <CardBody>
+            {gate === 'failed' ? (
+              <>
+                <InlineAlert>
+                  Could not check your recovery kit, so the vault stays closed. Reload to try again.
+                </InlineAlert>
+                <button
+                  type="button"
+                  onClick={() => window.location.reload()}
+                  className={`${PRIMARY_BUTTON} mt-5`}
+                >
+                  Reload
+                  <ArrowDot />
+                </button>
+                <p className="mt-2.5 text-center text-[13px] leading-5 text-muted">
+                  A reload locks the vault. Unlock again and the check runs again.
+                </p>
+              </>
+            ) : (
+              <p role="status" className="flex items-center gap-3 text-sm text-muted">
+                <span aria-hidden className="spinner text-ink" />
+                Checking your recovery kit.
+              </p>
+            )}
+          </CardBody>
+          <CardFactBand tone="neutral">The vault stays closed until this check passes</CardFactBand>
+        </Card>
+      </AuthShell>
     );
   }
 
@@ -373,19 +353,27 @@ function UnlockedVault({
 }) {
   const [products, setProducts] = useState<ProductRow[]>([]);
   const [secrets, setSecrets] = useState<SecretRow[]>([]);
-  const [productName, setProductName] = useState('Production');
-  const [secretName, setSecretName] = useState('api_key');
+  const [productName, setProductName] = useState('');
+  const [secretName, setSecretName] = useState('');
   const [secretValue, setSecretValue] = useState('');
   const [selected, setSelected] = useState<string | null>(null);
   const [revealedValue, setRevealedValue] = useState<string | null>(null);
+  // Which row the value belongs to, so it renders in place, in that key's own row.
+  const [revealedId, setRevealedId] = useState<string | null>(null);
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [now, setNow] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [errorAt, setErrorAt] = useState<ErrorSlot>('workspace');
+  // The slots with an action in flight: the ref answers a second submit at once, the state
+  // renders the busy buttons.
+  const running = useRef(new Set<ErrorSlot>());
+  const [busySlots, setBusySlots] = useState<ReadonlySet<ErrorSlot>>(() => new Set());
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [pwMsg, setPwMsg] = useState<string | null>(null);
   const [pendingAuth, setPendingAuth] = useState(false);
   const [loadState, setLoadState] = useState<'loading' | 'ready' | 'failed'>('loading');
+  const ids = useId();
   const pwStrength = newPassword ? scorePassword(newPassword) : null;
   const remaining = startedAt === null ? 0 : revealRemaining(startedAt, now);
   const revealed = revealedValue !== null && remaining > 0 ? revealedValue : null;
@@ -471,6 +459,7 @@ function UnlockedVault({
         setError('Could not save the product. Nothing was stored.');
         return;
       }
+      setProductName('');
       await refresh();
     } catch {
       setError('Could not save the product. Nothing was stored.');
@@ -515,6 +504,7 @@ function UnlockedVault({
         return;
       }
       setSecretValue('');
+      setSecretName('');
       await refresh();
     } catch (err) {
       setError(
@@ -629,175 +619,225 @@ function UnlockedVault({
     }
   }
 
+  function hideReveal() {
+    setStartedAt(null);
+    setRevealedValue(null);
+  }
+
+  // Switching product re-masks: the countdown would otherwise run on a value no longer in view.
+  function selectProduct(id: string) {
+    if (id !== selected) hideReveal();
+    setSelected(id);
+  }
+
+  /**
+   * Records which form acted, so its error renders beside it rather than at the top, and runs
+   * one action per slot at a time: a second submit would race the first (two products, or a
+   * duplicate key answered with "Nothing was saved." beside the row the first one saved).
+   */
+  function act(slot: ErrorSlot, run: () => Promise<void>, e?: React.FormEvent) {
+    if (running.current.has(slot)) {
+      e?.preventDefault();
+      return;
+    }
+    running.current.add(slot);
+    setBusySlots(new Set(running.current));
+    setErrorAt(slot);
+    void run().finally(() => {
+      running.current.delete(slot);
+      setBusySlots(new Set(running.current));
+    });
+  }
+
+  const errorId = (slot: ErrorSlot) => `${ids}-error-${slot}`;
+
+  function errorFor(slot: ErrorSlot) {
+    return error && errorAt === slot ? <InlineAlert id={errorId(slot)}>{error}</InlineAlert> : null;
+  }
+
+  /** An edit to a form clears that form's failure, so it never outlives the values it was about. */
+  function dismiss(slot: ErrorSlot) {
+    if (errorAt === slot) setError(null);
+  }
+
+  const selectedProduct = products.find((p) => p.id === selected) ?? null;
+  const visibleSecrets = secrets.filter((s) => !selected || s.product_id === selected);
+  const empty = loadState === 'ready' && products.length === 0;
+  // Not rendered while the vault reads: the form lives in the rail or in the empty state, and
+  // moving between the two remounts it, which would drop anything typed in the meantime.
+  const productForm =
+    loadState === 'loading' ? null : (
+      <ProductForm
+        id={`${ids}-product-name`}
+        value={productName}
+        onChange={setProductName}
+        onSubmit={(e) => act('product', () => addProduct(e), e)}
+        busy={busySlots.has('product')}
+        prominent={empty}
+        error={errorFor('product')}
+        errorId={errorId('product')}
+        onEdit={() => dismiss('product')}
+      />
+    );
+
   return (
-    <div className="flex min-h-full flex-col">
-      <SiteHeader variant="app" current="vault" />
-      <main id="content" className="mx-auto flex w-full max-w-2xl flex-1 flex-col px-6">
-        <div className="flex flex-1 flex-col pt-14">
-          <div className="flex flex-wrap items-end justify-between gap-4">
-            <div>
-              <p className="text-xs font-medium tracking-[0.2em] text-muted uppercase">
-                This device
-              </p>
-              <h1 className="mt-3 text-3xl font-semibold tracking-tight">Vault</h1>
-            </div>
-            <button
-              type="button"
-              onClick={() => void lockKeys()}
-              className="font-mono text-[11px] text-sealed-ink"
-            >
-              lock
-            </button>
+    <div className="app-field flex min-h-full flex-col">
+      <SiteHeader
+        variant="app"
+        current="vault"
+        sticky
+        action={
+          <button type="button" onClick={() => void lockKeys()} className={LOCK_BUTTON}>
+            <StateDot tone="attention" />
+            Lock
+          </button>
+        }
+      />
+      <main
+        id="content"
+        className="mx-auto w-full max-w-6xl flex-1 px-4 pt-10 pb-14 sm:px-6 sm:pt-12"
+      >
+        <div className="settle flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
+          <div>
+            <Eyebrow>This device</Eyebrow>
+            <h1 className="mt-4 text-[2.5rem] leading-none font-semibold tracking-[-0.045em] text-ink sm:text-5xl">
+              Vault
+            </h1>
           </div>
+          <p className="flex items-center gap-2 font-mono text-[11px] text-muted">
+            <StateDot tone="attention" />
+            Unlocked on this device
+          </p>
+        </div>
 
-          <form onSubmit={(e) => void addProduct(e)} className="mt-10 flex gap-2">
-            <input
-              value={productName}
-              onChange={(e) => setProductName(e.target.value)}
-              className="flex-1 rounded-2xl border border-line bg-base px-4 py-2"
-              aria-label="Product name"
-            />
-            <button type="submit" className="rounded-full bg-ink px-4 py-2 text-sm text-paper">
-              Add product
-            </button>
-          </form>
-
-          <ul className="mt-6 space-y-2">
-            {products.map((p) => (
-              <li key={p.id}>
-                <button
-                  type="button"
-                  onClick={() => setSelected(p.id)}
-                  className={selected === p.id ? 'font-semibold' : 'text-muted'}
-                >
-                  {p.name}
-                </button>
-              </li>
-            ))}
-          </ul>
-
-          {selected ? (
-            <form onSubmit={(e) => void addSecret(e)} className="mt-8 space-y-3">
-              <input
-                value={secretName}
-                onChange={(e) => setSecretName(e.target.value)}
-                aria-label="Secret name"
-                className="w-full rounded-2xl border border-line bg-base px-4 py-2 font-mono text-sm"
-              />
-              <input
-                value={secretValue}
-                onChange={(e) => setSecretValue(e.target.value)}
-                aria-label="Secret value"
-                className="w-full rounded-2xl border border-line bg-base px-4 py-2 font-mono text-sm"
-              />
-              <button type="submit" className="rounded-full bg-ink px-4 py-2 text-sm text-paper">
-                Store ciphertext
-              </button>
-            </form>
-          ) : null}
-
-          <ul className="mt-8 space-y-3">
-            {secrets
-              .filter((s) => !selected || s.product_id === selected)
-              .map((s) => (
-                <li
-                  key={s.id}
-                  className="flex items-center justify-between gap-3 border-t border-line pt-3"
-                >
-                  <span className="font-mono text-sm">{s.key_name}</span>
-                  <button type="button" onClick={() => void reveal(s)} className="text-sm text-ink">
-                    Reveal for 30s
-                  </button>
-                </li>
-              ))}
-          </ul>
-
-          {revealed ? (
-            <div className="mt-8 rounded-2xl border border-exposed bg-paper p-4">
-              <p className="font-mono text-sm break-all">{revealed}</p>
-              <div className="mt-3 flex gap-3 text-sm">
-                <button type="button" onClick={() => void copyRevealed()}>
-                  Copy
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setStartedAt(null);
-                    setRevealedValue(null);
-                  }}
-                >
-                  Hide now
-                </button>
-                <span className="text-muted">{formatRevealSeconds(remaining)}</span>
+        <Card className="settle settle-delay-1 mt-7">
+          <div className="workspace" data-empty={empty}>
+            {empty ? null : (
+              <div className="ws-list border-b border-line bg-base lg:border-r lg:border-b-0">
+                <div className="flex items-center justify-between gap-3 px-5 pt-5 pb-3">
+                  <h2 className="text-xs font-medium tracking-[0.16em] text-muted uppercase">
+                    Products
+                  </h2>
+                  {loadState === 'ready' ? (
+                    <span className="font-mono text-[11px] text-muted">{products.length}</span>
+                  ) : null}
+                </div>
+                {loadState === 'loading' ? (
+                  <RowsSkeleton rows={2} label="Loading products." />
+                ) : null}
+                <ProductList
+                  products={products.map((p) => ({
+                    id: p.id,
+                    name: p.name,
+                    keys: secrets.filter((s) => s.product_id === p.id).length,
+                  }))}
+                  selected={selected}
+                  onSelect={selectProduct}
+                />
               </div>
+            )}
+
+            {empty || productForm === null ? null : (
+              <div className="ws-add border-t border-line bg-base px-5 pt-4 pb-5 lg:border-r">
+                {productForm}
+              </div>
+            )}
+
+            <div className="ws-pane flex min-w-0 flex-col">
+              {loadState === 'failed' ? (
+                <div className="p-5 sm:p-6">
+                  <InlineAlert>Could not load your vault. Reload to try again.</InlineAlert>
+                  <button
+                    type="button"
+                    onClick={() => window.location.reload()}
+                    className={`${SMALL_INK} mt-4`}
+                  >
+                    Reload
+                  </button>
+                  <p className="mt-2 text-[13px] leading-5 text-muted">
+                    A reload locks the vault. Unlock again and it reads your products again.
+                  </p>
+                </div>
+              ) : null}
+              {loadState === 'loading' ? <RowsSkeleton rows={3} label="Loading keys." /> : null}
+              {empty ? <EmptyProducts>{productForm}</EmptyProducts> : null}
+              {selectedProduct ? (
+                <>
+                  <ProductHeader
+                    name={selectedProduct.name}
+                    environment={selectedProduct.environment}
+                  />
+                  {errorAt === 'workspace' && error ? (
+                    <div className="border-b border-line px-5 py-4 sm:px-6">
+                      {errorFor('workspace')}
+                    </div>
+                  ) : null}
+                  {visibleSecrets.length > 0 ? (
+                    <ul aria-label={`Keys in ${selectedProduct.name}`}>
+                      {visibleSecrets.map((s) => (
+                        <KeyRow
+                          key={s.id}
+                          name={s.key_name}
+                          version={s.version}
+                          revealed={revealedId === s.id ? revealed : null}
+                          remaining={remaining}
+                          onReveal={() => {
+                            hideReveal();
+                            setRevealedId(s.id);
+                            act('workspace', () => reveal(s));
+                          }}
+                          onCopy={() => act('workspace', copyRevealed)}
+                          onHide={hideReveal}
+                        />
+                      ))}
+                    </ul>
+                  ) : (
+                    <NoKeys product={selectedProduct.name} />
+                  )}
+                </>
+              ) : null}
+              <div className="flex-1" />
+              <ClipboardNotice clip={clip} onClear={clearClipboard} variant="band" />
+              {selectedProduct ? (
+                <SecretForm
+                  ids={ids}
+                  name={secretName}
+                  value={secretValue}
+                  onName={setSecretName}
+                  onValue={setSecretValue}
+                  onSubmit={(e) => act('secret', () => addSecret(e), e)}
+                  busy={busySlots.has('secret')}
+                  error={errorFor('secret')}
+                  errorId={errorId('secret')}
+                  onEdit={() => dismiss('secret')}
+                />
+              ) : null}
             </div>
-          ) : null}
+          </div>
+          <div className="card-band flex items-center justify-between gap-3 px-5 py-2.5 font-mono text-[11px] text-muted sm:px-6">
+            <span>Decrypted in this browser</span>
+            <span className="hidden text-right sm:inline">Locks after {IDLE_MINUTES} min idle</span>
+          </div>
+        </Card>
 
-          <ClipboardNotice clip={clip} onClear={clearClipboard} />
-
-          {loadState === 'failed' ? (
-            <p role="alert" className="mt-8 text-sm text-exposed-ink">
-              Could not load your vault. Reload to try again.
-            </p>
-          ) : null}
-
-          {error ? <p className="mt-4 text-sm text-exposed-ink">{error}</p> : null}
-          {pwMsg ? <p className="mt-4 text-sm text-muted">{pwMsg}</p> : null}
-
-          {loadState === 'ready' && products.length === 0 ? (
-            <div className="flex flex-1 flex-col justify-center py-16">
-              <p className="max-w-md text-[17px] leading-7 text-muted">
-                Empty. Paste a messy block. Ciphertext only leaves the browser.
-              </p>
-            </div>
-          ) : null}
-
-          <form
-            onSubmit={(e) => void changePassword(e)}
-            className="mt-12 space-y-3 border-t border-line pt-8"
-          >
-            <p className="text-sm font-medium">Change password</p>
-            <p className="text-sm text-muted">
-              Wraps first, then the login key. Recovery kit stays valid.
-            </p>
-            <PasswordField
-              label="New password"
-              value={newPassword}
-              onChange={setNewPassword}
-              autoComplete="new-password"
-              inputClassName="rounded-2xl border border-line bg-base px-4 py-2 pr-12"
-            />
-            <PasswordField
-              label="Confirm"
-              value={confirmPassword}
-              onChange={setConfirmPassword}
-              autoComplete="new-password"
-              revealNoun="confirmation"
-              inputClassName="rounded-2xl border border-line bg-base px-4 py-2 pr-12"
-            />
-            {pwStrength ? (
-              <p className="text-sm text-muted">
-                Strength {pwStrength.score}/4{pwStrength.reason ? ` · ${pwStrength.reason}` : ''}
-              </p>
-            ) : null}
-            <button type="submit" className="rounded-full bg-ink px-4 py-2 text-sm text-paper">
-              Rotate wraps
-            </button>
-            {pendingAuth ? (
-              <button
-                type="button"
-                onClick={() => void retryPasswordAuth()}
-                className="ml-2 text-sm text-ink"
-              >
-                Retry login-key update
-              </button>
-            ) : null}
-          </form>
-        </div>
-        <div className="sticky bottom-0 z-10 bg-gradient-to-t from-base from-60% to-transparent pb-6 pt-8">
-          <VaultComposer />
-        </div>
+        <PasswordPanel
+          ids={ids}
+          newPassword={newPassword}
+          confirmPassword={confirmPassword}
+          strength={pwStrength}
+          pendingAuth={pendingAuth}
+          message={pwMsg}
+          error={errorFor('password')}
+          errorId={errorId('password')}
+          onEdit={() => dismiss('password')}
+          onNewPassword={setNewPassword}
+          onConfirmPassword={setConfirmPassword}
+          onSubmit={(e) => act('password', () => changePassword(e), e)}
+          busy={busySlots.has('password')}
+          onRetry={() => act('password', retryPasswordAuth)}
+        />
       </main>
+      <AppFooter />
     </div>
   );
 }

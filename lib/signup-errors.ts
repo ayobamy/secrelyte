@@ -14,6 +14,18 @@ export function unlockUserMessage(err: { code?: string; message?: string }): str
   return 'Wrong email or password.';
 }
 
+/**
+ * Whether a failed sign-in is worth another try. auth-js reports a request that got no answer,
+ * or a 5xx from the auth server (a gateway timeout included), as AuthRetryableFetchError, and
+ * a 429 asks the client to slow down. Any other answer is about the credentials and will not
+ * change on a retry.
+ */
+export function isRetryableAuthError(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const { name, status } = err as { name?: unknown; status?: unknown };
+  return name === 'AuthRetryableFetchError' || status === 429;
+}
+
 export function isEmailTakenError(err: {
   code?: string;
   status?: number;

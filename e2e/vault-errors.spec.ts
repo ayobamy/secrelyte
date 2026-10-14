@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page, type Route } from '@playwright/test';
 import {
   LIVE_VAULT,
   LIVE_VAULT_REASON,
@@ -19,6 +19,20 @@ async function failAck(page: Page): Promise<void> {
   await page.route('**/rest/v1/rpc/ack_recovery_kit*', (route) =>
     route.fulfill({ status: 500, contentType: 'application/json', body: '{"message":"down"}' }),
   );
+}
+
+/** The browser's email and password sign-in, and only that (not a token refresh). */
+function isPasswordSignIn(url: URL): boolean {
+  return url.pathname === '/auth/v1/token' && url.searchParams.get('grant_type') === 'password';
+}
+
+/** What local GoTrue answers when a request runs past its 10 second limit. */
+function timeOut(route: Route): Promise<void> {
+  return route.fulfill({
+    status: 504,
+    contentType: 'application/json',
+    body: '{"code":"request_timeout","message":"Processing this request timed out, please retry after a moment."}',
+  });
 }
 
 /** The vault never rendered its controls. */
@@ -103,7 +117,10 @@ test('a failed vault load says so instead of showing an empty vault', async ({ p
   await expect(
     page.getByRole('alert').filter({ hasText: 'Could not load your vault.' }),
   ).toHaveText('Could not load your vault. Reload to try again.');
-  await expect(page.getByText(/^Empty\./)).toHaveCount(0);
+  // Nothing of the empty vault may show: not its heading, not its Next card.
+  await expect(page.getByText('No products yet')).toHaveCount(0);
+  await expect(page.getByText('Paste a messy block')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Reload' })).toBeVisible();
 });
 
 // An error from get_own_keys used to skip the recovery-kit gate and open the vault anyway.
@@ -161,6 +178,74 @@ test('a failed kit acknowledgement at signup keeps the vault shut, and a retry o
   await page.unroute('**/rest/v1/rpc/ack_recovery_kit*');
   await page.getByRole('button', { name: 'Open the vault' }).click();
   await expectVaultOpen(page);
+});
+
+// The sign-in right after signup used to be fire-and-forget: a gateway timeout there (local
+// GoTrue answers 504 after 10s under load) left the tab with no session, and every click on
+// "Open the vault" then failed with a message that blamed the connection.
+test('a timed-out sign-in after signup is retried, and the vault opens', async ({ page }) => {
+  let signIns = 0;
+  await page.route(isPasswordSignIn, (route) => {
+    signIns += 1;
+    return signIns === 1 ? timeOut(route) : route.continue();
+  });
+  await signUpAndOpenVault(page);
+  expect(signIns).toBe(2);
+});
+
+test('a sign-in that keeps failing after signup says so on the kit, and Unlock finishes it', async ({
+  page,
+}) => {
+  let signIns = 0;
+  await page.route(isPasswordSignIn, (route) => {
+    signIns += 1;
+    return timeOut(route);
+  });
+  let acks = 0;
+  page.on('request', (request) => {
+    if (request.url().includes('/rest/v1/rpc/ack_recovery_kit')) acks += 1;
+  });
+  const credentials = await signUpAndOpenVault(page, { expectOpen: false });
+  await expect(page.getByRole('alert').filter({ hasText: 'could not sign in' })).toHaveText(
+    'This tab could not sign in, so the kit cannot be recorded here. Your account exists: keep the PDF you downloaded, then go to Unlock and type its 24 words to finish.',
+  );
+  await expectVaultShut(page);
+  expect(signIns).toBe(3);
+  expect(acks).toBe(0);
+
+  // The way out the alert names: unlock, then confirm the kit with the words from the PDF.
+  await page.unroute(isPasswordSignIn);
+  await page.getByRole('link', { name: 'go to Unlock' }).click();
+  await page.waitForURL('**/login');
+  await unlockFromLogin(page, credentials);
+  await expect(page.getByLabel('24-word phrase')).toBeVisible({ timeout: 60_000 });
+  await page.getByLabel('24-word phrase').fill(credentials.words.join(' '));
+  await page.getByRole('button', { name: 'Confirm kit' }).click();
+  await expectVaultOpen(page);
+});
+
+// With email confirmation on, signup skips the sign-in on purpose. The kit screen used to blame
+// a failed sign-in (and before that, the connection) for a session that was never attempted.
+test('a signup that must confirm its email says so on the kit, not that sign-in failed', async ({
+  page,
+}) => {
+  // The response a server with SECRELYTE_REQUIRE_EMAIL_CONFIRM=1 gives; the rest is unchanged.
+  await page.route('**/api/signup', async (route) => {
+    const response = await route.fetch();
+    const body = { ...(await response.json()), confirmRequired: true };
+    await route.fulfill({ response, json: body });
+  });
+  let signIns = 0;
+  page.on('request', (request) => {
+    if (isPasswordSignIn(new URL(request.url()))) signIns += 1;
+  });
+  await signUpAndOpenVault(page, { expectOpen: false });
+  await expect(page.getByRole('alert').filter({ hasText: 'confirming' })).toHaveText(
+    'Your account exists, and its email address needs confirming before the kit can be recorded. Keep the PDF you downloaded, confirm the address, then go to Unlock and type its 24 words to finish.',
+  );
+  await expect(page.getByRole('alert').filter({ hasText: 'could not sign in' })).toHaveCount(0);
+  await expectVaultShut(page);
+  expect(signIns).toBe(0);
 });
 
 test('a failed confirmation on the phrase screen keeps the vault shut, and a retry opens it', async ({

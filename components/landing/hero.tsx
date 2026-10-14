@@ -31,6 +31,7 @@ export function Hero() {
             </p>
             <div className="settle settle-delay-3 mt-9 flex flex-col gap-3 sm:flex-row sm:items-center">
               <Link
+                prefetch
                 href="/signup"
                 className={`ink-shine cta-shine group inline-flex items-center justify-center gap-3 rounded-full bg-ink py-3 pr-2 pl-6 text-[15px] font-medium text-paper no-underline transition-transform ${ease} hover:bg-ink/90 active:scale-[0.98]`}
               >
@@ -43,6 +44,7 @@ export function Hero() {
                 </span>
               </Link>
               <Link
+                prefetch
                 href="#how"
                 className={`inline-flex items-center justify-center rounded-full bg-paper px-6 py-3.5 text-[15px] text-ink no-underline ring-1 ring-line transition-colors ${ease} hover:bg-base`}
               >
@@ -52,6 +54,7 @@ export function Hero() {
             <p className="settle settle-delay-4 mt-6 text-sm text-muted">
               Already have a vault?{' '}
               <Link
+                prefetch
                 href="/login"
                 className="font-medium text-ink underline decoration-line decoration-2 underline-offset-4 hover:decoration-signal"
               >

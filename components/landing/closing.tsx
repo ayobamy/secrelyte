@@ -28,6 +28,7 @@ export function Closing() {
           <p className="mx-auto mt-6 max-w-xl text-lg leading-8 text-muted">{CLOSING.lead}</p>
           <div className="mt-10 flex flex-col items-stretch justify-center gap-3 sm:flex-row sm:items-center">
             <Link
+              prefetch
               href="/signup"
               className={`ink-shine group inline-flex items-center justify-center gap-3 rounded-full bg-ink py-3 pr-2 pl-6 text-[15px] font-medium text-paper no-underline transition-transform ${ease} hover:bg-ink/90 active:scale-[0.98]`}
             >
@@ -40,6 +41,7 @@ export function Closing() {
               </span>
             </Link>
             <Link
+              prefetch
               href="/login"
               className={`inline-flex items-center justify-center rounded-full bg-paper px-6 py-3.5 text-[15px] text-ink no-underline ring-1 ring-line transition-colors ${ease} hover:bg-base`}
             >

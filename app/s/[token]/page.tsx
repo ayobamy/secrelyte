@@ -1,56 +1,85 @@
+import '../../app.css';
+import { AuthShell, Card, CardBody, CardFactBand } from '@/components/auth-shell';
+import { PreviewButton } from '@/components/landing/preview-button';
+import { StatusTag } from '@/components/landing/status-tag';
 import { SiteHeader } from '@/components/site-header';
+import { DEMO_KEY_NAME } from '@/lib/brand/landing-content';
 import { shareLinkLabel } from '@/lib/share-label';
 
 export const dynamic = 'force-dynamic';
 export const fetchCache = 'force-no-store';
 
+const MASK = '••••••••••••••••••';
+
+/**
+ * What a share link will look like to the person who receives it. Share links are Next, so this
+ * is a labelled preview: the value is a mask, and the one control says plainly that it did nothing.
+ */
 export default async function ShareViewPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
 
   return (
-    <div className="flex min-h-full flex-col">
-      <SiteHeader variant="app" current="share" />
-      <main id="content" className="mx-auto w-full max-w-lg flex-1 px-6 pt-16 pb-20">
-        <p className="text-xs font-medium tracking-[0.2em] text-muted uppercase">
+    <AuthShell
+      header={<SiteHeader variant="app" current="share" />}
+      eyebrow={
+        <>
           One-time handoff
-        </p>
-        <h1 className="mt-3 text-3xl font-semibold tracking-tight">Share</h1>
-        <p className="mt-3 text-muted leading-7">
-          Anyone who controls this inbox can read these. The fragment key never goes to the server.
-          This page loads no third-party scripts.
-        </p>
-
-        <div className="mt-10 rounded-[2rem] border border-line bg-line/40 p-1.5 shadow-[0_20px_50px_rgba(14,17,22,0.04)]">
-          <div className="rounded-[calc(2rem-0.375rem)] border border-line bg-paper px-5 py-6">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-xs text-muted">{shareLinkLabel(token)}</p>
-                <p className="mt-1 font-medium text-ink">Stripe · production</p>
-              </div>
-              <p className="font-mono text-sm text-signal-ink">1h 59m</p>
-            </div>
-            <div className="mt-4 h-1 overflow-hidden rounded-full bg-line" aria-hidden>
-              <div className="h-full w-[99%] rounded-full bg-signal" />
-            </div>
-            <div className="mt-6 rounded-2xl border border-line px-4 py-4">
-              <p className="text-xs text-sealed-ink">Masked · sealed</p>
-              <p className="mt-2 font-mono text-sm tracking-[0.18em] text-sealed-ink">
-                ••••••••••••••••
-              </p>
-            </div>
-            <p className="mt-5 text-sm leading-6 text-muted">
-              Revoking cannot un-see a viewed key. Rotate it.
-            </p>
-            <button
-              type="button"
-              disabled
-              className="mt-6 w-full rounded-full px-4 py-3 text-sm text-muted ring-1 ring-line"
+          <StatusTag status="next" />
+        </>
+      }
+      title="Share"
+      lead="Share links are Next. This is the page a recipient will see: one value, a countdown, and a plain note about who can read it."
+    >
+      <Card>
+        <div className="flex items-center justify-between gap-3 border-b border-line px-5 py-3 sm:px-7">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <span
+              aria-hidden
+              className="grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-line bg-base font-mono text-[11px] font-semibold text-ink"
             >
-              Send a proof to this inbox
-            </button>
+              S
+            </span>
+            <p className="truncate text-sm font-semibold tracking-tight text-ink">Stripe</p>
+            <span className="pill">production</span>
           </div>
+          <p className="shrink-0 font-mono text-[11px] text-muted">{shareLinkLabel(token)}</p>
         </div>
-      </main>
-    </div>
+        <CardBody className="space-y-5">
+          <div>
+            <div className="flex items-baseline justify-between gap-3">
+              <p className="text-xs text-muted">Expires in</p>
+              <p className="font-mono text-sm text-signal-ink tabular-nums">1h 59m</p>
+            </div>
+            <div aria-hidden className="expiry-bar mt-2">
+              <span />
+            </div>
+          </div>
+          <div className="value-box px-4 py-3.5">
+            <div className="flex items-center justify-between gap-3">
+              <p className="min-w-0 truncate font-mono text-[12.5px] font-medium text-ink">
+                {DEMO_KEY_NAME}
+              </p>
+              <p className="font-mono text-[11px] text-muted">v3</p>
+            </div>
+            <p className="mt-2 font-mono text-[15px] tracking-[0.16em]">
+              <span className="sr-only">Masked</span>
+              <span aria-hidden className="sealed-dots">
+                {MASK}
+              </span>
+            </p>
+          </div>
+          <p className="text-sm leading-6 text-muted">
+            Anyone who controls this inbox can read it. Revoking cannot un-see a viewed key. Rotate
+            it.
+          </p>
+          <PreviewButton
+            label="Reveal once"
+            hint="Opens one time. Then the link is spent."
+            response="Preview only. Share links are Next, so nothing was revealed."
+          />
+        </CardBody>
+        <CardFactBand aside="Preview only">No third-party scripts on this page</CardFactBand>
+      </Card>
+    </AuthShell>
   );
 }

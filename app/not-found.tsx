@@ -1,19 +1,26 @@
 import Link from 'next/link';
+import './app.css';
+import { AuthShell } from '@/components/auth-shell';
 import { SiteHeader } from '@/components/site-header';
+import { ArrowDot, PRIMARY_BUTTON, QUIET_BUTTON } from '@/components/ui';
 
 export default function NotFound() {
   return (
-    <div className="flex min-h-full flex-col">
-      <SiteHeader />
-      <main id="content" className="mx-auto max-w-xl flex-1 px-6 pt-24">
-        <h1 className="text-3xl font-semibold tracking-tight">Not found</h1>
-        <p className="mt-3 text-muted leading-7">
-          Absent, or you are not meant to know it exists. Same response either way.
-        </p>
-        <Link href="/" className="mt-8 inline-block text-ink underline-offset-4 hover:underline">
-          Back to the light
+    <AuthShell
+      header={<SiteHeader solid />}
+      eyebrow="404"
+      title="Not found"
+      lead="Absent, or you are not meant to know it exists. Same response either way."
+    >
+      <div className="mx-auto max-w-[22rem] space-y-3">
+        <Link prefetch href="/" className={PRIMARY_BUTTON}>
+          Back to the home page
+          <ArrowDot />
         </Link>
-      </main>
-    </div>
+        <Link prefetch href="/vault" className={`${QUIET_BUTTON} w-full`}>
+          Open your vault
+        </Link>
+      </div>
+    </AuthShell>
   );
 }

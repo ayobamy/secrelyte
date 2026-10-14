@@ -12,7 +12,7 @@ export {
   wrapForPasswordChange,
   type SignupMaterial,
 } from './signup-material';
-export { authPasswordFor, unlockFromOwnKeys, type OwnKeysRow } from './unlock';
+export { beginUnlock, unlockFromOwnKeys, type OwnKeysRow, type PendingUnlock } from './unlock';
 export {
   isUnlocked,
   getVaultKey,

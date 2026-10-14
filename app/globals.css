@@ -1,5 +1,6 @@
 @import 'tailwindcss';
 @import './tokens.css';
+@import './surfaces.css';
 
 @theme inline {
   --color-base: var(--base);
@@ -65,51 +66,6 @@ body {
   }
 }
 
-.light-wash {
-  background: radial-gradient(
-    ellipse 80% 55% at 50% -12%,
-    color-mix(in srgb, var(--signal) 11%, transparent),
-    transparent 70%
-  );
-}
-
-.hero-stage {
-  --mx: 72%;
-  --my: 28%;
-}
-
-.hero-orb {
-  pointer-events: none;
-  position: absolute;
-  inset: -10% -5% 20%;
-  z-index: 0;
-  background: radial-gradient(
-    640px circle at var(--mx) var(--my),
-    color-mix(in srgb, var(--signal) 12%, transparent),
-    transparent 62%
-  );
-}
-
-.hero-stage > :not(.hero-orb) {
-  position: relative;
-  z-index: 1;
-}
-
-.light-ray {
-  position: absolute;
-  top: -8%;
-  left: 42%;
-  height: 28rem;
-  width: 2px;
-  transform: rotate(18deg);
-  transform-origin: top center;
-  background: linear-gradient(
-    to bottom,
-    color-mix(in srgb, var(--signal) 28%, transparent),
-    transparent
-  );
-}
-
 /*
  * Two messages in one cell. The box always holds the taller one, and the inactive message is
  * visibility:hidden (also hidden from assistive tech), so swapping state never shifts layout.
@@ -144,90 +100,6 @@ body {
   mask-position: 0% 0;
 }
 
-.preview-stage {
-  position: relative;
-  perspective: 1400px;
-}
-
-.preview-halo {
-  pointer-events: none;
-  position: absolute;
-  inset: 14% 12% 10%;
-  z-index: 0;
-  border-radius: 2.4rem;
-  background: radial-gradient(
-    ellipse at 50% 40%,
-    color-mix(in srgb, var(--signal) 16%, transparent),
-    transparent 72%
-  );
-  filter: blur(28px);
-}
-
-.preview-ring {
-  pointer-events: none;
-  position: absolute;
-  inset: -2px;
-  z-index: 0;
-  border-radius: 2.1rem;
-  opacity: 0.5;
-  background: conic-gradient(
-    from 210deg,
-    transparent 0 58%,
-    color-mix(in srgb, var(--signal) 65%, white) 68%,
-    transparent 80%
-  );
-  mask: radial-gradient(farthest-side, transparent calc(100% - 1.5px), black calc(100% - 1.5px));
-}
-
-.preview-card {
-  position: relative;
-  z-index: 1;
-  transition: transform 700ms var(--ease);
-}
-
-@media (min-width: 1024px) {
-  .preview-stage:hover .preview-card {
-    transform: translateY(-8px);
-  }
-}
-
-.sealed-wait {
-  position: relative;
-}
-
-.sealed-wait::before {
-  content: '';
-  pointer-events: none;
-  position: absolute;
-  inset: -1px;
-  border-radius: inherit;
-}
-
-.light-sweep {
-  pointer-events: none;
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  overflow: hidden;
-  border-radius: inherit;
-}
-
-.light-sweep::after {
-  content: '';
-  position: absolute;
-  top: -20%;
-  bottom: -20%;
-  left: 0;
-  width: 42%;
-  transform: translateX(-140%) skewX(-20deg);
-  background: linear-gradient(
-    90deg,
-    transparent,
-    color-mix(in srgb, var(--paper) 70%, transparent),
-    transparent
-  );
-}
-
 .ink-shine {
   position: relative;
   overflow: hidden;
@@ -250,14 +122,6 @@ body {
 @media (prefers-reduced-motion: no-preference) {
   html {
     scroll-behavior: smooth;
-  }
-
-  .light-wash {
-    animation: wash-breathe 14s var(--ease) infinite;
-  }
-
-  .light-ray {
-    animation: ray-fall 5.5s var(--ease) infinite;
   }
 
   .settle {
@@ -292,30 +156,6 @@ body {
     animation-play-state: paused;
   }
 
-  .preview-halo {
-    animation: float 6.5s var(--ease) infinite;
-  }
-
-  .preview-ring {
-    animation: spin-slow 12s linear infinite;
-  }
-
-  .sealed-wait::before {
-    animation: sealed-wait 3.4s var(--ease) infinite;
-  }
-
-  .encrypted-pulse {
-    animation: encrypted-pulse 2.8s var(--ease) infinite;
-  }
-
-  .preview-card .light-sweep::after {
-    animation: sweep 1.35s var(--ease) 480ms both;
-  }
-
-  .preview-stage:hover .light-sweep::after {
-    animation: sweep 1.15s var(--ease) both;
-  }
-
   .cta-shine::after {
     animation: shine-pass 4.4s var(--ease) infinite;
   }
@@ -329,34 +169,12 @@ body {
   }
 }
 
-@keyframes wash-breathe {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.72;
-  }
-}
-
 @keyframes settle {
   from {
     transform: translateY(12px);
   }
   to {
     transform: translateY(0);
-  }
-}
-
-@keyframes ray-fall {
-  0%,
-  100% {
-    transform: rotate(18deg) scaleY(0.85);
-    opacity: 0.45;
-  }
-  50% {
-    transform: rotate(22deg) scaleY(1.05);
-    opacity: 1;
   }
 }
 
@@ -369,16 +187,6 @@ body {
   }
 }
 
-@keyframes float {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-10px);
-  }
-}
-
 @keyframes nudge {
   0%,
   70%,
@@ -387,32 +195,6 @@ body {
   }
   80% {
     transform: translateX(4px);
-  }
-}
-
-@keyframes spin-slow {
-  to {
-    transform: rotate(1turn);
-  }
-}
-
-@keyframes sealed-wait {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--sealed) 0%, transparent);
-  }
-  50% {
-    box-shadow: 0 0 0 8px color-mix(in srgb, var(--sealed) 10%, transparent);
-  }
-}
-
-@keyframes encrypted-pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.4;
   }
 }
 

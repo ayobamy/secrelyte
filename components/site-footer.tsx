@@ -49,6 +49,7 @@ export function SiteFooter() {
                   {column.links.map((link) => (
                     <li key={link.href}>
                       <Link
+                        prefetch
                         href={link.href}
                         className="text-ink underline-offset-4 hover:underline"
                       >

@@ -80,11 +80,16 @@ function pdfVisibleText(pdf: Buffer): string {
 /**
  * Signs up a fresh account and clears the recovery kit gate the way a user does: downloads
  * the real PDF, reads the 24 words out of it, and types back the three it asks for.
- * `beforeOpen` runs just before "Open the vault", for tests that need to set up routes first.
+ * `beforeDownload` runs on the kit screen before the PDF is saved; `beforeOpen` runs just before
+ * "Open the vault", for tests that need to set up routes first.
  */
 export async function signUpAndOpenVault(
   page: Page,
-  options: { beforeOpen?: () => Promise<void>; expectOpen?: boolean } = {},
+  options: {
+    beforeDownload?: () => Promise<void>;
+    beforeOpen?: () => Promise<void>;
+    expectOpen?: boolean;
+  } = {},
 ): Promise<Credentials> {
   const email = `e2e-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
   await page.goto('/signup');
@@ -95,6 +100,7 @@ export async function signUpAndOpenVault(
   await expect(page.getByRole('heading', { name: 'Recovery kit' })).toBeVisible({
     timeout: 60_000,
   });
+  await options.beforeDownload?.();
 
   const downloadPromise = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Download PDF' }).click();
@@ -127,13 +133,20 @@ export async function signUpAndOpenVault(
   return { email, password: PASSWORD, words: ordered, base32, rk };
 }
 
+const VAULT_OPEN_TIMEOUT_MS = 15_000;
+
 /**
  * The open vault, not just its heading: the gate's "vault stays closed" screen is headed
  * "Vault" too, so the heading alone would pass for a vault that never opened.
  */
 export async function expectVaultOpen(page: Page): Promise<void> {
-  await expect(page.getByRole('heading', { name: 'Vault' })).toBeVisible();
-  await expect(page.getByLabel('Product name')).toBeVisible();
+  // The vault opens after a network round trip (the kit acknowledgement, the key check), and
+  // the full suite runs several browsers at once, so a loaded machine can pass 5 seconds. How
+  // fast it opens is vault-speed.spec.ts's job; this only asks whether it opens.
+  await expect(page.getByRole('heading', { name: 'Vault' })).toBeVisible({
+    timeout: VAULT_OPEN_TIMEOUT_MS,
+  });
+  await expect(page.getByLabel('Product name')).toBeVisible({ timeout: VAULT_OPEN_TIMEOUT_MS });
 }
 
 /** Unlocks from /login. A full navigation drops the in-memory keys, which locks the vault. */
@@ -142,6 +155,11 @@ export async function unlockFromLogin(page: Page, credentials: Credentials): Pro
   await page.getByLabel('Email').fill(credentials.email);
   await page.getByLabel('Password', { exact: true }).fill(credentials.password);
   await page.getByRole('button', { name: 'Unlock' }).click();
+  // Argon2id (64 MiB) runs before the move to /vault, and the full suite runs several at once,
+  // so it can take longer than an assertion's default 5 seconds. Waiting here keeps every
+  // caller's next check about the vault, not about the derivation. For an unlock that is
+  // meant to fail, click Unlock directly instead of using this helper.
+  await page.waitForURL('**/vault', { timeout: 60_000 });
 }
 
 /** Locks the open vault with its own control, then unlocks it from /login. */

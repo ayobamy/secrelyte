@@ -3,6 +3,7 @@ import { signupConfirmsEmail } from './signup-confirm';
 import {
   isEmailTakenError,
   isMissingRpcError,
+  isRetryableAuthError,
   readErrorBits,
   signupUserMessage,
   unlockUserMessage,
@@ -61,5 +62,16 @@ describe('signup error mapping', () => {
       status: 0,
       message: 'boom',
     });
+  });
+
+  // A post-signup sign-in that hit a gateway timeout used to be ignored, stranding the account.
+  it('retries a sign-in only on failures that can clear by themselves', () => {
+    expect(isRetryableAuthError({ name: 'AuthRetryableFetchError', status: 504 })).toBe(true);
+    expect(isRetryableAuthError({ name: 'AuthRetryableFetchError', status: 0 })).toBe(true);
+    expect(isRetryableAuthError({ name: 'AuthApiError', status: 429 })).toBe(true);
+    expect(isRetryableAuthError({ name: 'AuthApiError', status: 400 })).toBe(false);
+    expect(isRetryableAuthError({ name: 'AuthApiError', status: 500 })).toBe(false);
+    expect(isRetryableAuthError(null)).toBe(false);
+    expect(isRetryableAuthError('timeout')).toBe(false);
   });
 });
