@@ -103,3 +103,17 @@ test('a weak-password error clears once the password is replaced', async ({ page
   await expect(alerts).toHaveCount(0);
   await expect(field).not.toHaveAttribute('aria-invalid', 'true');
 });
+
+// Smooth scrolling on the app screens animated a scroll into view under the pointer: the press
+// landed on Create vault or Add product and the release somewhere else, so no click fired. It
+// belongs to the landing page's in-page links only.
+test('scrolling is smooth on the landing page only', async ({ page }) => {
+  const scrollBehavior = () =>
+    page.evaluate(() => getComputedStyle(document.documentElement).scrollBehavior);
+  await page.goto('/');
+  expect(await scrollBehavior()).toBe('smooth');
+  for (const path of ['/signup', '/login', '/vault']) {
+    await page.goto(path);
+    expect(await scrollBehavior()).toBe('auto');
+  }
+});

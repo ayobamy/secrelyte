@@ -48,6 +48,16 @@ export function hexToBytes(hex: string): Uint8Array {
   return out;
 }
 
+/** Equal length and bytes, compared without an early exit. */
+export function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.byteLength !== b.byteLength) return false;
+  let diff = 0;
+  for (let i = 0; i < a.byteLength; i += 1) {
+    diff |= a[i]! ^ b[i]!;
+  }
+  return diff === 0;
+}
+
 export function bytesFromWire(value: unknown): Uint8Array {
   if (value instanceof Uint8Array) return value;
   if (value instanceof ArrayBuffer) return new Uint8Array(value);

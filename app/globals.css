@@ -120,7 +120,12 @@ body {
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  html {
+  /*
+   * Smooth only where it has a job: the landing page's in-page links. On the app screens a
+   * programmatic scroll (a focus move, a test runner bringing a button into view) would
+   * animate under the pointer, and a press that ends somewhere else is not a click.
+   */
+  html:has(.landing) {
     scroll-behavior: smooth;
   }
 

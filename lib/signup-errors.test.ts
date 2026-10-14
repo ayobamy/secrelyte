@@ -3,7 +3,9 @@ import { signupConfirmsEmail } from './signup-confirm';
 import {
   isEmailTakenError,
   isMissingRpcError,
+  describeThrown,
   isRetryableAuthError,
+  thrownSubmitMessage,
   readErrorBits,
   signupUserMessage,
   unlockUserMessage,
@@ -73,5 +75,40 @@ describe('signup error mapping', () => {
     expect(isRetryableAuthError({ name: 'AuthApiError', status: 500 })).toBe(false);
     expect(isRetryableAuthError(null)).toBe(false);
     expect(isRetryableAuthError('timeout')).toBe(false);
+  });
+
+  // "Signup failed." named no cause and no next step; a tab older than the deploy looked the
+  // same as a dropped connection.
+  it('names what to do when a submit throws, by the stage it reached', () => {
+    expect(thrownSubmitMessage('derive', 'later')).toBe(
+      'Keys could not be derived in this tab. Reload the page and try again.',
+    );
+    expect(thrownSubmitMessage('send', 'later')).toBe(
+      'Could not reach Secrelyte. Check your connection and try again.',
+    );
+    expect(thrownSubmitMessage('open', 'later')).toBe('later');
+  });
+
+  it('cuts a thrown value down to its name, message or event type for the console', () => {
+    expect(describeThrown(new TypeError('Failed to fetch'))).toBe('TypeError: Failed to fetch');
+    expect(describeThrown({ type: 'error' })).toBe('Event: error');
+    expect(describeThrown('boom')).toBe('string');
+    expect(describeThrown(new Error('x'.repeat(500)))).toHaveLength(200);
+  });
+
+  // A gateway timeout at unlock used to read "Wrong email or password."
+  it('does not call a timeout or a rate limit a wrong password', () => {
+    const reach = 'Could not reach Secrelyte. Check your connection and try again.';
+    expect(unlockUserMessage({ name: 'AuthRetryableFetchError', status: 504 })).toBe(reach);
+    expect(unlockUserMessage({ name: 'AuthApiError', status: 429 })).toBe(
+      'Too many attempts. Wait a few minutes and try again.',
+    );
+    expect(
+      unlockUserMessage({
+        name: 'AuthApiError',
+        status: 400,
+        message: 'Invalid login credentials',
+      }),
+    ).toBe('Wrong email or password.');
   });
 });

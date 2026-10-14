@@ -38,6 +38,7 @@ import {
   takePendingKeys as takeKeys,
 } from '@/components/auth-forms';
 import { createBrowserSupabase } from '@/lib/supabase/browser';
+import { describeThrown } from '@/lib/signup-errors';
 import { AppFooter, AuthShell, Card, CardBody, CardFactBand } from '@/components/auth-shell';
 import { SiteHeader } from '@/components/site-header';
 import { LockedVault } from '@/components/locked-vault';
@@ -91,6 +92,20 @@ type SecretRow = {
 
 /** Where a failure renders: beside the form or row that caused it. */
 type ErrorSlot = 'product' | 'secret' | 'workspace' | 'password';
+
+/**
+ * Whether this tab holds a session. A read that throws (storage refused) counts as none: the
+ * kit screen then points at Unlock, which works, instead of a button that does nothing.
+ */
+async function hasSession(): Promise<boolean> {
+  try {
+    const { data } = await createBrowserSupabase().auth.getSession();
+    return data.session !== null;
+  } catch (err) {
+    console.error('vault: session read threw:', describeThrown(err));
+    return false;
+  }
+}
 
 export function VaultApp() {
   const ids = useId();
@@ -181,9 +196,7 @@ export function VaultApp() {
   // failed or the address must be confirmed first, so find out before the three steps.
   useEffect(() => {
     if (!kit) return;
-    void createBrowserSupabase()
-      .auth.getSession()
-      .then(({ data }) => setKitSignedOut(!data.session));
+    void hasSession().then((signedIn) => setKitSignedOut(!signedIn));
   }, [kit]);
 
   async function downloadKit() {
@@ -211,15 +224,15 @@ export function VaultApp() {
       setKitError('Those three words do not match the kit.');
       return;
     }
-    const supabase = createBrowserSupabase();
     // Signup goes on to the kit even when its sign-in failed (see auth-forms.tsx), and with no
     // session the acknowledgement fails on every retry. Say so and point at Unlock instead.
-    const { data } = await supabase.auth.getSession();
-    setKitSignedOut(!data.session);
-    if (!data.session) {
+    const signedIn = await hasSession();
+    setKitSignedOut(!signedIn);
+    if (!signedIn) {
       setKitError(null);
       return;
     }
+    const supabase = createBrowserSupabase();
     const { error: ackError } = await supabase.rpc('ack_recovery_kit');
     if (ackError) {
       setKitError('Could not record that you stored the kit. Check your connection and try again.');

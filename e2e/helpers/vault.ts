@@ -80,12 +80,14 @@ function pdfVisibleText(pdf: Buffer): string {
 /**
  * Signs up a fresh account and clears the recovery kit gate the way a user does: downloads
  * the real PDF, reads the 24 words out of it, and types back the three it asks for.
- * `beforeDownload` runs on the kit screen before the PDF is saved; `beforeOpen` runs just before
- * "Open the vault", for tests that need to set up routes first.
+ * `afterSubmit` runs right after "Create vault" is pressed; `beforeDownload` runs on the kit
+ * screen before the PDF is saved; `beforeOpen` runs just before "Open the vault", for tests that
+ * need to set up routes first.
  */
 export async function signUpAndOpenVault(
   page: Page,
   options: {
+    afterSubmit?: () => Promise<void>;
     beforeDownload?: () => Promise<void>;
     beforeOpen?: () => Promise<void>;
     expectOpen?: boolean;
@@ -97,6 +99,7 @@ export async function signUpAndOpenVault(
   await page.getByLabel('Email').fill(email);
   await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
   await page.getByRole('button', { name: 'Create vault' }).click();
+  await options.afterSubmit?.();
   await expect(page.getByRole('heading', { name: 'Recovery kit' })).toBeVisible({
     timeout: 60_000,
   });

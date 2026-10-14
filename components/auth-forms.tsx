@@ -8,6 +8,7 @@ import {
   MIN_PASSWORD_LENGTH,
   assembleSignupMaterial,
   beginUnlock,
+  rowFromThisSignup,
   scorePassword,
   unlockKeys,
   type SignupMaterial,
@@ -18,7 +19,16 @@ import { Card, CardBody, CardFactBand, CardLinkBand } from '@/components/auth-sh
 import { PasswordField, StrengthMeter } from '@/components/password-field';
 import { ArrowDot, BusyDot, FieldError, PRIMARY_BUTTON, TEXT_LINK } from '@/components/ui';
 import { joinIds, useFieldErrors } from '@/components/use-field-errors';
-import { isRetryableAuthError, signupUserMessage, unlockUserMessage } from '@/lib/signup-errors';
+import {
+  NO_ANSWER_MESSAGE,
+  SIGNUP_UNANSWERED_MESSAGE,
+  describeThrown,
+  isRetryableAuthError,
+  signupUserMessage,
+  thrownSubmitMessage,
+  unlockUserMessage,
+  type SubmitStage,
+} from '@/lib/signup-errors';
 
 type Kit = SignupMaterial['kit'] & {
   email: string;
@@ -29,6 +39,55 @@ type Kit = SignupMaterial['kit'] & {
 let pendingKit: Kit | null = null;
 let pendingKeys: { vk: SignupMaterial['vk']; sk: SignupMaterial['sk'] } | null = null;
 
+type SignupAttempt = { email: string; password: string; material: SignupMaterial; body: string };
+
+/** Derives the keys for a new vault and the request that creates it. */
+async function signupRequest(email: string, password: string) {
+  const material = await assembleSignupMaterial(email, password);
+  const body = JSON.stringify({
+    email: material.email,
+    authPassword: material.authPassword,
+    publicKey: await toB64url(material.publicKey),
+    wrappedVaultKey: await toB64url(material.wrappedVaultKey),
+    wrappedPrivateKey: await toB64url(material.wrappedPrivateKey),
+    recoveryWrappedVaultKey: await toB64url(material.recoveryWrappedVaultKey),
+    recoveryWrappedPrivateKey: await toB64url(material.recoveryWrappedPrivateKey),
+    kdf: material.kdf,
+  });
+  return { material, body };
+}
+
+/** Hands the new vault's kit and keys to the vault page, which shows the kit first. */
+function openKit(material: SignupMaterial, confirmEmail: boolean): void {
+  pendingKit = { ...material.kit, email: material.email, confirmEmail };
+  pendingKeys = { vk: material.vk, sk: material.sk };
+  if (!confirmEmail) unlockKeys(material.vk, material.sk);
+}
+
+/**
+ * After "email taken" on a resent request: signs in and checks that the vault on the server is
+ * the one this material wrote (rowFromThisSignup). Signed in on a match; signed out otherwise,
+ * so a vault this tab cannot open is never left signed in.
+ */
+async function signInToOwnSignup(material: SignupMaterial): Promise<boolean> {
+  try {
+    const supabase = createBrowserSupabase();
+    const signed = await supabase.auth.signInWithPassword({
+      email: material.email,
+      password: material.authPassword,
+    });
+    if (signed.error) return false;
+    const keys = await supabase.rpc('get_own_keys');
+    const row = Array.isArray(keys.data) ? keys.data[0] : keys.data;
+    if (!keys.error && row && rowFromThisSignup(row, material)) return true;
+    await supabase.auth.signOut({ scope: 'local' });
+    return false;
+  } catch (err) {
+    console.error('signup: checking the earlier attempt threw:', describeThrown(err));
+    return false;
+  }
+}
+
 /** The waits before each retry of the sign-in that follows signup. */
 const SIGN_IN_RETRY_DELAYS_MS = [500, 1500];
 
@@ -38,11 +97,18 @@ const SIGN_IN_RETRY_DELAYS_MS = [500, 1500];
  * screen checks for before it records the kit.
  */
 async function signInAfterSignup(email: string, authPassword: string): Promise<void> {
-  const supabase = createBrowserSupabase();
-  for (const delay of [...SIGN_IN_RETRY_DELAYS_MS, null]) {
-    const { error } = await supabase.auth.signInWithPassword({ email, password: authPassword });
-    if (!error || delay === null || !isRetryableAuthError(error)) return;
-    await new Promise((resolve) => setTimeout(resolve, delay));
+  try {
+    const supabase = createBrowserSupabase();
+    for (const delay of [...SIGN_IN_RETRY_DELAYS_MS, null]) {
+      const { error } = await supabase.auth.signInWithPassword({ email, password: authPassword });
+      if (!error || delay === null || !isRetryableAuthError(error)) return;
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  } catch (err) {
+    // auth-js throws, rather than answers, when the session cannot be stored (a blocked
+    // cookie, a held lock). The account exists by now, so this must not fail the signup: no
+    // session is the same outcome as a refused sign-in, and the kit screen handles it.
+    console.error('signup: sign-in after signup threw:', describeThrown(err));
   }
 }
 
@@ -146,6 +212,10 @@ export function SignupForm() {
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The last request that got no answer, and the material behind it. The server may have
+  // created that vault, so a retry with the same email and password resends exactly this,
+  // instead of deriving new keys and words for an account that may already hold the old ones.
+  const unanswered = useRef<SignupAttempt | null>(null);
   const strength = password ? scorePassword(password) : null;
   const fields = useFieldErrors<FieldName>();
   const id = useId();
@@ -159,46 +229,62 @@ export function SignupForm() {
       return;
     }
     setBusy(true);
+    let stage: SubmitStage = 'derive';
+    let created = false;
     try {
-      const material = await assembleSignupMaterial(email, password);
+      // A retry of a request whose answer never came resends it unchanged (see unanswered).
+      const kept = unanswered.current;
+      const retry = kept !== null && kept.email === email && kept.password === password;
+      const { material, body } = retry ? kept : await signupRequest(email, password);
+      unanswered.current = { email, password, material, body };
+      stage = 'send';
       const res = await fetch('/api/signup', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          email: material.email,
-          authPassword: material.authPassword,
-          publicKey: await toB64url(material.publicKey),
-          wrappedVaultKey: await toB64url(material.wrappedVaultKey),
-          wrappedPrivateKey: await toB64url(material.wrappedPrivateKey),
-          recoveryWrappedVaultKey: await toB64url(material.recoveryWrappedVaultKey),
-          recoveryWrappedPrivateKey: await toB64url(material.recoveryWrappedPrivateKey),
-          kdf: material.kdf,
-        }),
+        body,
       });
       const json = (await res.json().catch(() => ({}))) as {
         error?: string;
         confirmRequired?: boolean;
       };
+      if (!res.ok && !json.error) {
+        // A proxy's timeout, not the route's answer: the route may have finished. Keep it.
+        setError(SIGNUP_UNANSWERED_MESSAGE);
+        return;
+      }
+      unanswered.current = null;
       if (!res.ok) {
+        if (json.error === 'EMAIL_TAKEN' && retry && (await signInToOwnSignup(material))) {
+          // The first send created this vault and lost its answer. Pick it up where it was.
+          created = true;
+          openKit(material, false);
+          router.push('/vault');
+          return;
+        }
         setError(signupUserMessage(json.error));
         return;
       }
-      pendingKit = {
-        ...material.kit,
-        email: material.email,
-        confirmEmail: json.confirmRequired === true,
-      };
-      pendingKeys = { vk: material.vk, sk: material.sk };
-      if (!json.confirmRequired) {
+      created = true;
+      if (json.confirmRequired) {
+        openKit(material, true);
+      } else {
         // The account exists from here on, so a sign-in that still fails goes on to the kit
         // anyway: the kit lives only in this tab, and losing it would strand the account. The
         // kit screen finds no session and sends the user to Unlock to finish.
         await signInAfterSignup(material.email, material.authPassword);
-        unlockKeys(material.vk, material.sk);
+        openKit(material, false);
       }
       router.push('/vault');
-    } catch {
-      setError('Signup failed.');
+    } catch (err) {
+      console.error(`signup: failed while ${stage}:`, describeThrown(err));
+      if (created) {
+        // The vault exists and its kit is pending: the kit screen still has to show it.
+        router.push('/vault');
+      } else if (stage === 'send') {
+        setError(SIGNUP_UNANSWERED_MESSAGE);
+      } else {
+        setError(thrownSubmitMessage(stage, 'Could not create the account.'));
+      }
     } finally {
       setBusy(false);
     }
@@ -334,10 +420,13 @@ export function LoginForm() {
     e.preventDefault();
     setError(null);
     setBusy(true);
+    let stage: SubmitStage = 'send';
     try {
       const kdf = await kdfParamsFor(email);
+      stage = 'derive';
       // One Argon2id derivation gives both the login key and the key that opens the vault.
       const pending = await beginUnlock(email, password, kdf);
+      stage = 'open';
       try {
         const supabase = createBrowserSupabase();
         const signed = await supabase.auth.signInWithPassword({
@@ -349,6 +438,11 @@ export function LoginForm() {
           return;
         }
         const keys = await supabase.rpc('get_own_keys');
+        if (keys.error) {
+          // Signed in, but the key fetch failed: that says nothing about the account's keys.
+          setError(NO_ANSWER_MESSAGE);
+          return;
+        }
         const row = Array.isArray(keys.data) ? keys.data[0] : keys.data;
         if (!row) {
           setError('No keys on this account.');
@@ -359,8 +453,16 @@ export function LoginForm() {
         await pending.discard();
       }
       router.push('/vault');
-    } catch {
-      setError('Could not open the vault on this device. Check the password and try again.');
+    } catch (err) {
+      console.error(`unlock: failed while ${stage}:`, describeThrown(err));
+      setError(
+        // A throw after the sign-in comes after the server accepted the password: a key row
+        // this tab cannot open, or the tab itself. The password is not the problem.
+        thrownSubmitMessage(
+          stage,
+          'Could not open the vault in this tab. Reload the page and try again.',
+        ),
+      );
     } finally {
       setBusy(false);
     }

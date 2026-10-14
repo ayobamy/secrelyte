@@ -13,6 +13,7 @@ export {
   type SignupMaterial,
 } from './signup-material';
 export { beginUnlock, unlockFromOwnKeys, type OwnKeysRow, type PendingUnlock } from './unlock';
+export { rowFromThisSignup } from './signup-resume';
 export {
   isUnlocked,
   getVaultKey,

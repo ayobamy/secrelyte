@@ -248,6 +248,144 @@ test('a signup that must confirm its email says so on the kit, not that sign-in 
   expect(signIns).toBe(0);
 });
 
+// auth-js throws, rather than answers, on a sign-in response it cannot read (a proxy answering
+// 200 with junk). That throw used to land in the form's catch: "Signup failed." for an account
+// that now existed without its kit.
+test('a sign-in that throws after signup still goes on to the kit', async ({ page }) => {
+  await page.route(isPasswordSignIn, (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: 'null' }),
+  );
+  let created = 0;
+  page.on('response', (response) => {
+    if (response.url().endsWith('/api/signup') && response.status() === 200) created += 1;
+  });
+  await signUpAndOpenVault(page, { expectOpen: false });
+  expect(created).toBe(1);
+  await expect(page.getByRole('alert').filter({ hasText: 'not created' })).toHaveCount(0);
+  await expect(page.getByRole('alert').filter({ hasText: 'could not sign in' })).toBeVisible();
+  await expectVaultShut(page);
+});
+
+/** Fills the signup form with a fresh address and submits it. */
+async function submitSignup(page: Page): Promise<void> {
+  await page.goto('/signup');
+  await page
+    .getByLabel('Email')
+    .fill(`e2e-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`);
+  await page.getByLabel('Password', { exact: true }).fill('correct-horse-battery-staple-orbit');
+  await page.getByRole('button', { name: 'Create vault' }).click();
+}
+
+// A tab opened before a deploy asks for a key worker file that no longer exists. That used to
+// read "Signup failed."; it now says to reload, and nothing reaches the server.
+test('keys that cannot be derived say to reload, and nothing is sent', async ({ page }) => {
+  await page.addInitScript(() => {
+    const RealWorker = window.Worker;
+    window.Worker = class extends RealWorker {
+      constructor(...args: ConstructorParameters<typeof Worker>) {
+        super('/_next/static/gone-since-the-last-deploy.js', args[1]);
+      }
+    };
+  });
+  let sent = 0;
+  page.on('request', (request) => {
+    if (request.url().endsWith('/api/signup')) sent += 1;
+  });
+  await submitSignup(page);
+  await expect(page.getByRole('alert').filter({ hasText: 'not created' })).toContainText(
+    'Keys could not be derived in this tab. Reload the page and try again.',
+    { timeout: 30_000 },
+  );
+  expect(sent).toBe(0);
+});
+
+// The server can create the vault and lose its answer on the way back. The retry used to derive
+// new keys and words, hear "email taken", and strand the first vault behind 24 words the user
+// never saw. It now resends the same request and picks that vault up.
+test('a signup whose answer is lost picks its vault up on the next press', async ({ page }) => {
+  let taken = 0;
+  page.on('response', (response) => {
+    if (response.url().endsWith('/api/signup') && response.status() === 409) taken += 1;
+  });
+  await page.route(
+    '**/api/signup',
+    async (route) => {
+      await route.fetch();
+      await route.abort('connectionreset');
+    },
+    { times: 1 },
+  );
+  await signUpAndOpenVault(page, {
+    afterSubmit: async () => {
+      await expect(page.getByRole('alert').filter({ hasText: 'not created' })).toContainText(
+        'No answer came back, so the vault may have been created. Press Create vault again on this page, without reloading, to finish.',
+        { timeout: 30_000 },
+      );
+      await page.getByRole('button', { name: 'Create vault' }).click();
+    },
+  });
+  // The second press heard "email taken", proved the vault was this one, and opened its kit.
+  expect(taken).toBe(1);
+});
+
+// A gateway timeout at unlock used to read "Wrong email or password."
+test('a timed-out unlock says the server did not answer, not that the password is wrong', async ({
+  page,
+}) => {
+  const credentials = await signUpAndOpenVault(page);
+  await page.route(isPasswordSignIn, timeOut);
+  await page.goto('/login');
+  await page.getByLabel('Email').fill(credentials.email);
+  await page.getByLabel('Password', { exact: true }).fill(credentials.password);
+  await page.getByRole('button', { name: 'Unlock' }).click();
+  const alert = page.getByRole('alert').filter({ hasText: 'did not open' });
+  await expect(alert).toContainText(
+    'Could not reach Secrelyte. Check your connection and try again.',
+    { timeout: 30_000 },
+  );
+  await expect(alert).not.toContainText('Wrong email or password.');
+});
+
+// After a sign-in the server accepted, a failed key fetch read "No keys on this account" and a
+// key row this tab could not open read "Check the password". Neither was about the password.
+test('unlock failures after the password is accepted do not blame the password', async ({
+  page,
+}) => {
+  const credentials = await signUpAndOpenVault(page);
+  const unlock = async () => {
+    await page.goto('/login');
+    await page.getByLabel('Email').fill(credentials.email);
+    await page.getByLabel('Password', { exact: true }).fill(credentials.password);
+    await page.getByRole('button', { name: 'Unlock' }).click();
+    return page.getByRole('alert').filter({ hasText: 'did not open' });
+  };
+
+  await page.route('**/rest/v1/rpc/get_own_keys*', (route) =>
+    route.fulfill({ status: 500, contentType: 'application/json', body: '{}' }),
+  );
+  await expect(await unlock()).toContainText(
+    'Could not reach Secrelyte. Check your connection and try again.',
+    { timeout: 30_000 },
+  );
+  await page.unroute('**/rest/v1/rpc/get_own_keys*');
+
+  await page.route('**/rest/v1/rpc/get_own_keys*', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([
+        { wrapped_vault_key: '\\x00', wrapped_private_key: '\\x00', recovery_ack_at: null },
+      ]),
+    }),
+  );
+  const alert = await unlock();
+  await expect(alert).toContainText(
+    'Could not open the vault in this tab. Reload the page and try again.',
+    { timeout: 30_000 },
+  );
+  await expect(alert).not.toContainText('password');
+});
+
 test('a failed confirmation on the phrase screen keeps the vault shut, and a retry opens it', async ({
   page,
 }) => {
